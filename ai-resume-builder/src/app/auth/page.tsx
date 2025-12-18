@@ -1,39 +1,97 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eye, EyeOff, Bot, Star, Check, ArrowRight } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Eye, EyeOff, Bot, ArrowRight,
+  User, Briefcase, Camera, Upload
+} from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { LoginSchema, RegisterSchema, LoginPayload, RegisterPayload } from "@/lib/schema"; // Import Schema
 
 export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
 
+  // State cho phần Đăng ký
+  const [role, setRole] = useState<"candidate" | "recruiter">("candidate");
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const loginForm = useForm<LoginPayload>({
+    resolver: zodResolver(LoginSchema),
+    mode: "onChange",
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
+
+  /* ================= REGISTER FORM ================= */
+  const registerForm = useForm<RegisterPayload>({
+    resolver: zodResolver(RegisterSchema),
+    mode: "onChange",
+    defaultValues: {
+      fullName: "",
+      email: "",
+      password: "",
+      role: "candidate",
+      avatar: "",
+    },
+  });
+
+  /* ================= HANDLERS ================= */
+
+  const handleRoleSelect = (value: "candidate" | "recruiter") => {
+    setRole(value);
+    registerForm.setValue("role", value, {
+      shouldValidate: true,
+    });
+  };
+
+  const handleAvatarChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      setAvatarPreview(base64);
+      registerForm.setValue("avatar", base64, {
+        shouldValidate: true,
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const onLoginSubmit = (data: LoginPayload) => {
+    console.log("LOGIN:", data);
+  };
+
+  const onRegisterSubmit = (data: RegisterPayload) => {
+    console.log("REGISTER:", data);
+  };
   return (
     <div className="w-full h-screen grid lg:grid-cols-2">
       {/* --- LEFT SIDE: MARKETING --- */}
       <div className="hidden lg:flex flex-col justify-between bg-[#0052cc] p-12 relative overflow-hidden">
-        {/* Background Overlay Image (Giả lập ảnh mờ phía sau) */}
-        <div 
-            className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1542744173-8e7e53415bb0?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center opacity-20 mix-blend-overlay"
+        <div
+          className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1542744173-8e7e53415bb0?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center opacity-20 mix-blend-overlay"
         ></div>
-        
-        {/* Gradient Overlay để chữ dễ đọc hơn */}
         <div className="absolute inset-0 bg-gradient-to-t from-[#0044aa] to-transparent"></div>
 
-        {/* Content bên trái */}
         <div className="relative z-10 space-y-12 h-full flex flex-col justify-center">
-          
-          {/* Badge */}
           <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-lg w-fit text-white/90 text-xs font-bold uppercase tracking-wider border border-white/20">
             <Bot className="w-4 h-4" />
             AI Powered Recruitment
           </div>
-
-          {/* Headline */}
           <div className="space-y-4">
             <h1 className="text-5xl font-bold text-white leading-tight">
               Kết nối nhân tài với cơ hội bằng sức mạnh AI
@@ -42,109 +100,224 @@ export default function AuthPage() {
               Hệ thống tuyển dụng thông minh giúp bạn tiết kiệm 80% thời gian sàng lọc và tìm kiếm ứng viên phù hợp nhất.
             </p>
           </div>
-
-          {/* Divider Line */}
           <div className="h-px w-full bg-gradient-to-r from-white/30 to-transparent"></div>
-
-          {/* Social Proof */}
-      
         </div>
       </div>
 
 
       {/* --- RIGHT SIDE: FORM --- */}
-      <div className="flex items-center justify-center p-8 bg-white">
+      <div className="flex items-center justify-center p-8 bg-white overflow-y-auto">
         <div className="w-full max-w-[440px] space-y-8">
-          
-          {/* Logo Mobile (Chỉ hiện khi màn hình nhỏ) */}
-          <div className="lg:hidden flex justify-center mb-4">
-             <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600">
-                <Bot className="w-8 h-8" />
-             </div>
-          </div>
 
-          {/* Icon Logo ở giữa (Desktop) */}
-          <div className="hidden lg:flex justify-center mb-6">
-            <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 shadow-sm">
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8">
-                  <path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.5-1.25L12 8.5l-2.5 1.25L12 11zm0 2.5l-5-2.5-5 2.5L12 22l10-8.5-5-2.5-5 2.5z"/>
-                </svg>
-             </div>
+          {/* Logo Mobile */}
+          <div className="lg:hidden flex justify-center mb-4">
+            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600">
+              <Bot className="w-8 h-8" />
+            </div>
           </div>
 
           <div className="text-center space-y-2">
-            <h2 className="text-3xl font-bold tracking-tight text-slate-900">Chào mừng trở lại!</h2>
-            <p className="text-slate-500 text-sm">Nhập thông tin đăng nhập để truy cập tài khoản của bạn.</p>
+            <h2 className="text-3xl font-bold tracking-tight text-slate-900">Chào mừng!</h2>
+            <p className="text-slate-500 text-sm">Hãy bắt đầu hành trình sự nghiệp của bạn.</p>
           </div>
 
           {/* TABS SWITCHER */}
           <Tabs defaultValue="login" className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6 h-12 bg-slate-100/80 p-1">
-              <TabsTrigger value="login" className="text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all">Đăng nhập</TabsTrigger>
-              <TabsTrigger value="register" className="text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all">Đăng ký</TabsTrigger>
+              <TabsTrigger value="login">Đăng nhập</TabsTrigger>
+              <TabsTrigger value="register">Đăng ký</TabsTrigger>
             </TabsList>
 
             {/* --- FORM LOGIN --- */}
             <TabsContent value="login" className="space-y-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email hoặc Tên đăng nhập</Label>
-                  <Input id="email" placeholder="name@company.com" className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-colors" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Mật khẩu</Label>
-                  <div className="relative">
-                    <Input 
-                        id="password" 
-                        type={showPassword ? "text" : "password"} 
-                        placeholder="••••••••" 
-                        className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-colors pr-10" 
+              <form
+                onSubmit={loginForm.handleSubmit(onLoginSubmit)}
+                className="space-y-6"
+              >
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email hoặc Tên đăng nhập</Label>
+                    <Input
+                      id="email"
+                      placeholder="name@company.com"
+                      {...loginForm.register("email")}
+                      className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-colors"
                     />
-                    <button 
+                    {loginForm.formState.errors.email && (
+                      <p className="text-xs text-red-500">
+                        {loginForm.formState.errors.email.message}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Mật khẩu</Label>
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        {...loginForm.register("password")}
+                        className="h-11 bg-slate-50 border-slate-200 focus:bg-white transition-colors pr-10"
+                      />
+
+                      {loginForm.formState.errors.password && (
+                        <p className="text-xs text-red-500">
+                          {loginForm.formState.errors.password.message}
+                        </p>
+                      )}
+                      <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
                         className="absolute right-3 top-3 text-slate-400 hover:text-slate-600"
-                    >
+                      >
                         {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Checkbox id="remember" className="border-slate-300 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600" />
-                  <label htmlFor="remember" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-slate-600">
-                    Ghi nhớ đăng nhập
-                  </label>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox id="remember" className="border-slate-300 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600" />
+                    <label htmlFor="remember" className="text-sm font-medium leading-none text-slate-600">
+                      Ghi nhớ đăng nhập
+                    </label>
+                  </div>
+                  <Link href="#" className="text-sm font-medium text-blue-600 hover:underline">
+                    Quên mật khẩu?
+                  </Link>
                 </div>
-                <Link href="#" className="text-sm font-medium text-blue-600 hover:underline">
-                  Quên mật khẩu?
-                </Link>
-              </div>
 
-              <Button className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-base font-semibold shadow-lg shadow-blue-600/20">
-                Đăng nhập <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
+                <Button className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-base font-semibold shadow-lg shadow-blue-600/20">
+                  Đăng nhập <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </form>
             </TabsContent>
 
-            {/* --- FORM REGISTER (Placeholder) --- */}
-            <TabsContent value="register" className="space-y-4">
-               <div className="space-y-2">
-                  <Label htmlFor="reg-email">Email công việc</Label>
-                  <Input id="reg-email" placeholder="name@company.com" className="h-11" />
+            {/* --- FORM REGISTER --- */}
+            <TabsContent value="register" className="space-y-6">
+              <form
+                onSubmit={registerForm.handleSubmit(onRegisterSubmit)}
+                className="space-y-6"
+              >
+                {/* 1. Avatar Upload (Optional) */}
+                <div className="flex flex-col items-center gap-3">
+                  <div
+                    className="relative group cursor-pointer"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Avatar className="w-24 h-24 border-4 border-slate-50 shadow-sm group-hover:border-blue-100 transition-all">
+                      <AvatarImage src={avatarPreview || ""} className="object-cover" />
+                      <AvatarFallback className="bg-slate-100 text-slate-400">
+                        <Camera className="w-8 h-8" />
+                      </AvatarFallback>
+                    </Avatar>
+
+                    {/* Icon dấu cộng nhỏ hoặc icon upload */}
+                    <div className="absolute bottom-0 right-0 bg-blue-600 text-white p-1.5 rounded-full border-2 border-white shadow-sm">
+                      <Upload className="w-3.5 h-3.5" />
+                    </div>
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarChange}
+                    />
+                  </div>
+                  <span className="text-xs text-slate-400 font-medium">Ảnh đại diện (Không bắt buộc)</span>
                 </div>
+
+                {/* 2. Role Selection */}
                 <div className="space-y-2">
-                  <Label htmlFor="reg-pass">Mật khẩu</Label>
-                  <Input id="reg-pass" type="password" placeholder="••••••••" className="h-11" />
+                  <Label>Bạn là ai?</Label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div
+                      onClick={() => handleRoleSelect("candidate")}
+                      className={`
+                        cursor-pointer border-2 rounded-xl p-4 flex flex-col items-center gap-2 transition-all
+                        ${role === "candidate" ? "border-blue-600 bg-blue-50 text-blue-700" : "border-slate-200 hover:border-blue-200 hover:bg-slate-50 text-slate-600"}
+                      `}
+                    >
+                      <User className="w-6 h-6" />
+                      <span className="text-sm font-bold">Ứng viên</span>
+                    </div>
+
+                    <div
+                      onClick={() => handleRoleSelect("recruiter")}
+                      className={`
+                        cursor-pointer border-2 rounded-xl p-4 flex flex-col items-center gap-2 transition-all
+                        ${role === "recruiter" ? "border-blue-600 bg-blue-50 text-blue-700" : "border-slate-200 hover:border-blue-200 hover:bg-slate-50 text-slate-600"}
+                      `}
+                    >
+                      <Briefcase className="w-6 h-6" />
+                      <span className="text-sm font-bold">Nhà tuyển dụng</span>
+                    </div>
+                  </div>
                 </div>
-                <Button className="w-full h-11 bg-blue-600 hover:bg-blue-700 font-semibold mt-4">
-                    Tạo tài khoản mới
+
+                {/* 3. Inputs */}
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="fullname">Họ và tên</Label>
+                      <Input
+                        id="fullname"
+                        placeholder="Nguyễn Văn A"
+                        {...registerForm.register("fullName")}
+                        className="h-11"
+                      />
+
+                      {registerForm.formState.errors.fullName && (
+                        <p className="text-xs text-red-500">
+                          {registerForm.formState.errors.fullName.message}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="reg-email">Email</Label>
+                      <Input
+                        id="reg-email"
+                        placeholder="name@example.com"
+                        {...registerForm.register("email")}
+                        className="h-11"
+                      />
+
+                      {registerForm.formState.errors.email && (
+                        <p className="text-xs text-red-500">
+                          {registerForm.formState.errors.email.message}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="reg-pass">Mật khẩu</Label>
+                    <Input
+                      id="reg-pass"
+                      type="password"
+                      placeholder="••••••••"
+                      {...registerForm.register("password")}
+                      className="h-11"
+                    />
+
+                    {registerForm.formState.errors.password && (
+                      <p className="text-xs text-red-500">
+                        {registerForm.formState.errors.password.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <Button className="w-full h-11 bg-blue-600 hover:bg-blue-700 font-semibold shadow-lg shadow-blue-600/20">
+                  Tạo tài khoản mới
                 </Button>
+              </form>
             </TabsContent>
           </Tabs>
 
-          {/* Social Login */}
+          {/* Social Login & Footer (Giữ nguyên) */}
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-slate-200" />
@@ -156,29 +329,20 @@ export default function AuthPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <Button variant="outline" className="h-11 border-slate-200 hover:bg-slate-50 hover:text-slate-900 font-normal">
-              <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512"><path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path></svg>
               Google
             </Button>
             <Button variant="outline" className="h-11 border-slate-200 hover:bg-slate-50 hover:text-slate-900 font-normal">
-               <svg className="mr-2 h-4 w-4 text-[#0077b5]" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
-               LinkedIn
+              LinkedIn
             </Button>
           </div>
 
-          {/* Footer Links */}
           <div className="text-center space-y-4">
-             <p className="text-sm text-slate-500">
-                Bạn chưa có tài khoản?{" "}
-                <Link href="#" className="font-semibold text-blue-600 hover:underline">
-                  Đăng ký ngay
-                </Link>
-             </p>
-             
-             <div className="flex justify-center gap-6 text-xs text-slate-400">
-                <Link href="#" className="hover:text-slate-600">Điều khoản sử dụng</Link>
-                <Link href="#" className="hover:text-slate-600">Chính sách bảo mật</Link>
-                <Link href="#" className="hover:text-slate-600">Trợ giúp</Link>
-             </div>
+            <p className="text-sm text-slate-500">
+              Đã có tài khoản?{" "}
+              <Link href="#" className="font-semibold text-blue-600 hover:underline">
+                Đăng nhập
+              </Link>
+            </p>
           </div>
 
         </div>

@@ -1,0 +1,104 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+}
+
+// 1. Bảng Người dùng (Dùng chung cho cả Ứng viên & Nhà tuyển dụng)
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   @unique
+  name      String?
+  password  String   // Lưu hash password
+  role      Role     @default(CANDIDATE) // Phân quyền
+  createdAt DateTime @default(now())
+
+  // Quan hệ ngược
+  candidateProfile CandidateProfile?
+  jobs             Job[]             // Nếu là Recruiter thì có nhiều Job
+}
+
+// 2. Hồ sơ Ứng viên
+model CandidateProfile {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String   @unique @db.ObjectId
+  user        User     @relation(fields: [userId], references: [id])
+  
+  headline    String?  // Ví dụ: Senior React Developer
+  phone       String?
+  cvUrl       String?  // Link PDF
+  skills      String[] // ["React", "NodeJS"]
+  experience  Json?    // Lưu dạng JSON cho linh hoạt
+  education   Json?
+  
+  applications Application[]
+}
+
+// 3. Tin tuyển dụng
+model Job {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String
+  location    String
+  salaryRange String?
+  status      JobStatus @default(OPEN)
+  createdAt   DateTime  @default(now())
+
+  recruiterId String   @db.ObjectId
+  recruiter   User     @relation(fields: [recruiterId], references: [id])
+
+  applications Application[]
+}
+
+// 4. Đơn ứng tuyển (Bảng nối giữa Job và Candidate)
+model Application {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  jobId        String   @db.ObjectId
+  job          Job      @relation(fields: [jobId], references: [id])
+  
+  candidateId  String   @db.ObjectId
+  candidate    CandidateProfile @relation(fields: [candidateId], references: [id])
+
+  status       AppStatus @default(PENDING)
+  aiMatchScore Int?      // Điểm AI chấm (0-100)
+  aiAnalysis   String?   // Nhận xét của AI
+  appliedAt    DateTime  @default(now())
+  
+  interviews   Interview[]
+}
+
+// 5. Lịch phỏng vấn
+model Interview {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  applicationId String   @db.ObjectId
+  application   Application @relation(fields: [applicationId], references: [id])
+  
+  date          DateTime
+  notes         String?
+  rating        Int?     // Đánh giá 1-5 sao
+}
+
+// Enums (Danh sách chọn cố định)
+enum Role {
+  CANDIDATE
+  RECRUITER
+  ADMIN
+}
+
+enum JobStatus {
+  OPEN
+  CLOSED
+  DRAFT
+}
+
+enum AppStatus {
+  PENDING
+  REVIEWING
+  INTERVIEW
+  OFFERED
+  REJECTED
+}

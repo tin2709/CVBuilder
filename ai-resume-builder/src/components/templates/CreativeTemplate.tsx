@@ -1,50 +1,104 @@
-import { ResumeData } from "@/types/resume";
+import { Mail, Phone, MapPin, Linkedin } from "lucide-react";
 
-export const CreativeTemplate = ({ data }: { data: ResumeData }) => {
+// Props có thể nhận dữ liệu dynamic từ Editor, ở đây tôi hardcode để giống hình
+export const CreativeTemplate = ({ data }: { data?: any }) => {
   return (
-    <div className="font-sans">
-      {/* Bold Header Background */}
-      <div className="bg-rose-500 text-white -mx-[20mm] -mt-[20mm] p-[20mm] mb-8 shadow-md">
-        <h1 className="text-5xl font-extrabold mb-2 tracking-tighter">
-          {data.personalInfo.fullName || "YOUR NAME"}
-        </h1>
-        <p className="text-rose-100 text-lg font-light tracking-wide">
-          Creative Developer / Designer
-        </p>
+    <div className="w-full h-full bg-white shadow-lg text-slate-800 flex flex-row" style={{ aspectRatio: '210/297' }}>
+      
+      {/* CỘT TRÁI (30%) */}
+      <div className="w-[32%] bg-[#F8FAFC] p-6 flex flex-col gap-8 border-r border-slate-100">
         
-        <div className="flex gap-6 mt-6 text-sm font-medium">
-            <span className="bg-white/20 px-3 py-1 rounded-full">{data.personalInfo.email}</span>
-            <span className="bg-white/20 px-3 py-1 rounded-full">{data.personalInfo.phone}</span>
+        {/* Avatar */}
+        <div className="flex justify-center">
+            <div className="w-24 h-24 rounded-full bg-yellow-100 border-4 border-white shadow-sm overflow-hidden relative">
+                 <img src="https://avatar.iran.liara.run/public/boy" alt="Avatar" className="object-cover w-full h-full" />
+            </div>
+        </div>
+
+        {/* Contact */}
+        <div>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 border-b pb-2">Contact</h3>
+            <div className="space-y-3 text-[10px] md:text-xs">
+                <div className="flex items-center gap-2">
+                    <Mail className="w-3 h-3 text-slate-500" />
+                    <span>sarah.j@box.com</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Phone className="w-3 h-3 text-slate-500" />
+                    <span>+1 555 000 1234</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <MapPin className="w-3 h-3 text-slate-500" />
+                    <span>San Francisco, CA</span>
+                </div>
+            </div>
+        </div>
+
+        {/* Skills */}
+        <div>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 border-b pb-2">Skills</h3>
+            <div className="flex flex-wrap gap-2">
+                {['React', 'Node.js', 'TypeScript', 'Tailwind', 'Next.js', 'Figma'].map(skill => (
+                    <span key={skill} className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-medium text-slate-700">
+                        {skill}
+                    </span>
+                ))}
+            </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="grid grid-cols-12 gap-8">
-         {/* Left Column */}
-         <div className="col-span-8 space-y-8">
-            <section>
-                <h3 className="text-2xl font-black text-rose-500 mb-4">About Me</h3>
-                <p className="text-slate-700 leading-7">
-                    {data.personalInfo.summary}
+      {/* CỘT PHẢI (70%) */}
+      <div className="flex-1 p-8">
+            {/* Header Info */}
+            <div className="mb-8">
+                <h1 className="text-3xl font-bold text-slate-900 mb-1">Sarah Jenkins</h1>
+                <p className="text-blue-600 font-medium text-sm uppercase tracking-wide">Senior Software Engineer</p>
+                <p className="text-xs text-slate-500 mt-4 leading-relaxed">
+                    Experienced software engineer with a focus on building scalable web applications. Passionate about clean code, user experience, and mentoring junior developers.
                 </p>
-            </section>
-             <section>
-                <h3 className="text-2xl font-black text-rose-500 mb-4">Experience</h3>
-                <p className="text-slate-400">Loading...</p>
-            </section>
-         </div>
+            </div>
 
-         {/* Right Sidebar (Skills placeholder) */}
-         <div className="col-span-4 space-y-8 border-l border-rose-100 pl-6">
-             <section>
-                <h3 className="text-lg font-bold text-slate-800 mb-4 uppercase">Skills</h3>
-                <div className="flex flex-wrap gap-2">
-                    <span className="bg-rose-100 text-rose-600 px-2 py-1 text-xs font-bold rounded">React</span>
-                    <span className="bg-rose-100 text-rose-600 px-2 py-1 text-xs font-bold rounded">Next.js</span>
-                    <span className="bg-rose-100 text-rose-600 px-2 py-1 text-xs font-bold rounded">Design</span>
+            {/* Experience */}
+            <div className="mb-6">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4">Experience</h3>
+                
+                <div className="mb-4">
+                    <div className="flex justify-between items-baseline mb-1">
+                        <h4 className="font-bold text-sm text-slate-800">Tech Solutions Inc.</h4>
+                        <span className="text-[10px] text-slate-400">2021 - Present</span>
+                    </div>
+                    <p className="text-xs text-slate-500 italic mb-2">Senior Frontend Developer</p>
+                    <ul className="list-disc ml-4 space-y-1 text-[11px] text-slate-600">
+                        <li>Led the migration of legacy codebase to React 18.</li>
+                        <li>Improved site performance by 40% through code splitting.</li>
+                        <li>Mentored a team of 4 junior developers.</li>
+                    </ul>
                 </div>
-             </section>
-         </div>
+
+                <div>
+                    <div className="flex justify-between items-baseline mb-1">
+                        <h4 className="font-bold text-sm text-slate-800">Creative Web Agency</h4>
+                        <span className="text-[10px] text-slate-400">2018 - 2021</span>
+                    </div>
+                    <p className="text-xs text-slate-500 italic mb-2">Web Developer</p>
+                    <ul className="list-disc ml-4 space-y-1 text-[11px] text-slate-600">
+                        <li>Developed responsive websites for over 20 clients.</li>
+                        <li>Implemented CI/CD pipelines to streamline deployment.</li>
+                    </ul>
+                </div>
+            </div>
+
+            {/* Education */}
+            <div>
+                 <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4">Education</h3>
+                 <div>
+                    <div className="flex justify-between items-baseline mb-1">
+                        <h4 className="font-bold text-sm text-slate-800">University of Technology</h4>
+                        <span className="text-[10px] text-slate-400">2014 - 2018</span>
+                    </div>
+                    <p className="text-xs text-slate-600">Bachelor of Science in Computer Science</p>
+                </div>
+            </div>
       </div>
     </div>
   );
