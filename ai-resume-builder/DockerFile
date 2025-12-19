@@ -31,5 +31,4 @@ COPY --from=builder /app/node_modules ./node_modules
 # Mở cổng 3000
 EXPOSE 3000
 
-# Lệnh chạy server
 CMD ["npm", "start"]
