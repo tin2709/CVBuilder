@@ -1,4 +1,3 @@
-# 1. Dùng Node 22 làm nền
 FROM node:22-alpine AS builder
 
 WORKDIR /app
