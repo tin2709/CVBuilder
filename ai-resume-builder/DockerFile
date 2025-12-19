@@ -1,21 +1,24 @@
-# 1. Dùng Node 22 (giống máy bạn) làm nền
+# 1. Dùng Node 22 làm nền
 FROM node:22-alpine AS builder
 
-# 2. Tạo thư mục làm việc
 WORKDIR /app
 
-# 3. Copy file cấu hình package để cài thư viện trước
 COPY package.json package-lock.json ./
 RUN npm install
 
-# 4. Copy toàn bộ code vào
 COPY . .
 
-# 5. Chạy Prisma Generate (bắt buộc)
+# --- THÊM 2 DÒNG NÀY VÀO ĐÂY ---
+# Khai báo biến nhận từ bên ngoài vào
+ARG DATABASE_URL
+# Gán nó thành biến môi trường để Prisma dùng
+ENV DATABASE_URL=$DATABASE_URL
+# -------------------------------
+
+# 5. Chạy Prisma Generate
 RUN npx prisma generate
 
 # 6. Build dự án Next.js
-# Lưu ý: Nếu cần biến môi trường build, có thể thêm ARG
 RUN npm run build
 
 # --- GIAI ĐOẠN CHẠY (Runner) ---
