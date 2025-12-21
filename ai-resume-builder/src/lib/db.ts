@@ -1,11 +1,8 @@
-// src/lib/db.ts
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from '@prisma/client';
+import { createClient } from 'redis';
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
+export const prisma = new PrismaClient();
+export const redis = createClient({ url: process.env.REDIS_URL || 'redis://127.0.0.1:6379' });
 
-// THAY ĐỔI Ở ĐÂY: Truyền datasourceUrl thủ công
-export const db = globalForPrisma.prisma ?? new PrismaClient()
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+// Kết nối Redis khi khởi động
+redis.connect().catch(console.error);
