@@ -212,7 +212,7 @@ export default function AuthPage() {
                       Ghi nhớ đăng nhập
                     </label>
                   </div>
-                  <Link href="#" className="text-sm font-medium text-blue-600 hover:underline">
+                  <Link href="/auth/forgotpass" className="text-sm font-medium text-blue-600 hover:underline">
                     Quên mật khẩu?
                   </Link>
                 </div>

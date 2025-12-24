@@ -32,5 +32,23 @@ export const authClientService = {
       throw new Error(result.message || "Đăng ký thất bại");
     }
     return result;
+  },
+   async requestForgotPassword(email: string) {
+    const res = await client.api.auth['forgot-password'].$post({
+      json: { email }
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.message || "Lỗi gửi yêu cầu");
+    return result;
+  },
+
+  // Gửi OTP + Mật khẩu mới để reset
+  async submitResetPassword(data: { email: string; otp: string; newPassword: any }) {
+    const res = await client.api.auth['reset-password'].$post({
+      json: data
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.message || "Lỗi reset mật khẩu");
+    return result;
   }
 };

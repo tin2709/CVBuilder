@@ -54,6 +54,26 @@ const authRoute = app
       }, 401); // 401 là Unauthorized
     }
   })
+      .post('/forgot-password', async (c) => {
+    const { email } = await c.req.json();
+    try {
+      await authService.forgotPassword(email);
+      return c.json({ success: true, message: "Mã OTP đã được gửi đến email của bạn" });
+    } catch (error: any) {
+      return c.json({ success: false, message: error.message }, 400);
+    }
+  })
+
+  .post('/reset-password', async (c) => {
+    const body = await c.req.json(); // Nhận { email, otp, newPassword }
+    try {
+      await authService.resetPassword(body);
+      return c.json({ success: true, message: "Đổi mật khẩu thành công" });
+    } catch (error: any) {
+      return c.json({ success: false, message: error.message }, 400);
+    }
+
+  })
 
  
 
