@@ -6,3 +6,4 @@ export const redis = createClient({ url: process.env.REDIS_URL || 'redis://127.0
 
 // Kết nối Redis khi khởi động
 redis.connect().catch(console.error);
+

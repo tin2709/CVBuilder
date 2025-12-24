@@ -28,7 +28,8 @@ async function main() {
   console.log('--- Đang xóa dữ liệu cũ (Tùy chọn) ---');
   // await prisma.candidateProfile.deleteMany();
   // await prisma.user.deleteMany();
-
+await prisma.candidateProfile.deleteMany({});
+  await prisma.user.deleteMany({});
   console.log('--- Đang bắt đầu seed 10 ứng viên ---');
 
   for (const item of candidates) {

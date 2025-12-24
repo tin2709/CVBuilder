@@ -1,81 +1,58 @@
 // src/server/routes/auth.ts
-import { Hono } from 'hono'
-import { zValidator } from '@hono/zod-validator'
-import { RegisterSchema,LoginSchema } from '@/lib/schema'
+import { OpenAPIHono } from '@hono/zod-openapi';
+import { registerRouteDoc, loginRouteDoc, forgotPasswordDoc, resetPasswordDoc } from '@/schemas/api-doc';
 import { authService } from "@/services/auth.service";
 
-const app = new Hono()
+const authRoute = new OpenAPIHono();
 
-const authRoute = app
-  .post('/register', zValidator('json', RegisterSchema), async (c) => {
-    const data = c.req.valid('json');
-    
-    try {
-      // CHÚ Ý: Map lại dữ liệu ở đây
-      const result = await authService.register({
-        email: data.email,
-        password: data.password,
-        name: data.fullName, // Chuyển fullName từ Zod sang name cho Service
-        role: data.role?.toUpperCase() || "CANDIDATE" // Chuyển 'candidate' thành 'CANDIDATE'
-      }); 
+authRoute.openapi(registerRouteDoc, async (c) => {
+  const data = c.req.valid('json');
+  try {
+    const result = await authService.register({
+      email: data.email,
+      password: data.password,
+      name: data.fullName,
+      role: data.role?.toUpperCase() || "CANDIDATE"
+    }); 
+    return c.json({ success: true, message: "Đăng ký thành công", user: result }, 200);
+  } catch (error: any) {
+    return c.json({ success: false, message: error.message }, 400);
+  }
+});
 
-      return c.json({ 
-        success: true, 
-          message: "Đăng ký thành công", // Thêm dòng này
-        user: result 
-      });
-    } catch (error: any) {
-      console.error("Register Error:", error);
-      return c.json({ 
-        success: false, 
-        message: error.message || "Đã có lỗi xảy ra" 
-      }, 400);
-    }
-  })
-     .post('/login', zValidator('json', LoginSchema), async (c) => {
-    const data = c.req.valid('json');
+authRoute.openapi(loginRouteDoc, async (c) => {
+  const data = c.req.valid('json');
+  try {
+    const result = await authService.login({ email: data.email, password: data.password });
+    return c.json({ success: true, message: "Đăng nhập thành công", ...result }, 200);
+  } catch (error: any) {
+    return c.json({ success: false, message: error.message }, 401);
+  }
+});
 
-    try {
-      const result = await authService.login({
-        email: data.email,
-        password: data.password
-      });
-
-      return c.json({
-        success: true,
-        message: "Đăng nhập thành công",
-        ...result // Trả về { user, accessToken }
-      });
-    } catch (error: any) {
-      console.error("Login Error:", error);
-      return c.json({
-        success: false,
-        message: error.message || "Đăng nhập thất bại"
-      }, 401); // 401 là Unauthorized
-    }
-  })
-      .post('/forgot-password', async (c) => {
-    const { email } = await c.req.json();
+// Tương tự cho forgot-password và reset-password...
+authRoute.openapi(forgotPasswordDoc, async (c) => {
+    const { email } = c.req.valid('json');
     try {
       await authService.forgotPassword(email);
-      return c.json({ success: true, message: "Mã OTP đã được gửi đến email của bạn" });
+      // Trả về đúng kiểu AuthResponseSchema (status 200)
+      return c.json({ success: true, message: "Mã OTP đã gửi" }, 200);
     } catch (error: any) {
-      return c.json({ success: false, message: error.message }, 400);
+      // Trả về đúng kiểu ErrorResponseSchema (status 400)
+      return c.json({ 
+        success: false, 
+        message: String(error.message || "Lỗi không xác định") 
+      }, 400); // 400 bây giờ đã hợp lệ vì đã khai báo trong Doc
     }
-  })
-
-  .post('/reset-password', async (c) => {
-    const body = await c.req.json(); // Nhận { email, otp, newPassword }
+});
+authRoute.openapi(resetPasswordDoc, async (c) => {
+    const body = c.req.valid('json');
     try {
       await authService.resetPassword(body);
-      return c.json({ success: true, message: "Đổi mật khẩu thành công" });
+      return c.json({ success: true, message: "Thành công" }, 200);
     } catch (error: any) {
       return c.json({ success: false, message: error.message }, 400);
     }
+});
 
-  })
-
- 
-
-  
-export default authRoute
+export default authRoute;
