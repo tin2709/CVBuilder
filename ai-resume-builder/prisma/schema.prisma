@@ -83,7 +83,20 @@ model Interview {
   notes         String?
   rating        Int?     // Đánh giá 1-5 sao
 }
+model Otp {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  email     String   
+  code      String   // Mã 6 số
+  purpose   OtpPurpose // Sử dụng Enum để quản lý mục đích
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
+  @@unique([email, purpose]) // Mỗi email tại một thời điểm chỉ có 1 mã cho 1 mục đích
+}
+
+enum OtpPurpose {
+  FORGOT_PASSWORD    // Quên mật khẩu
+}
 // Enums (Danh sách chọn cố định)
 enum Role {
   CANDIDATE

@@ -1,7 +1,7 @@
 // src/server/routes/auth.ts
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
-import { RegisterSchema } from '@/lib/schema'
+import { RegisterSchema,LoginSchema } from '@/lib/schema'
 import { authService } from "@/services/auth.service";
 
 const app = new Hono()
@@ -21,6 +21,7 @@ const authRoute = app
 
       return c.json({ 
         success: true, 
+          message: "Đăng ký thành công", // Thêm dòng này
         user: result 
       });
     } catch (error: any) {
@@ -31,15 +32,30 @@ const authRoute = app
       }, 400);
     }
   })
+     .post('/login', zValidator('json', LoginSchema), async (c) => {
+    const data = c.req.valid('json');
 
-  // --- LOGIN ---
-  // .post(
-  //   '/login',
-  //   zValidator('json', LoginSchema),
-  //   async (c) => {
-  //     const data = c.req.valid('json')
-  //     return c.json({ success: true, message: 'Login OK' })
-  //   }
-  // )
+    try {
+      const result = await authService.login({
+        email: data.email,
+        password: data.password
+      });
 
+      return c.json({
+        success: true,
+        message: "Đăng nhập thành công",
+        ...result // Trả về { user, accessToken }
+      });
+    } catch (error: any) {
+      console.error("Login Error:", error);
+      return c.json({
+        success: false,
+        message: error.message || "Đăng nhập thất bại"
+      }, 401); // 401 là Unauthorized
+    }
+  })
+
+ 
+
+  
 export default authRoute

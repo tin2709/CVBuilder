@@ -15,6 +15,8 @@ import {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoginSchema, RegisterSchema, LoginPayload, RegisterPayload } from "@/lib/schema"; // Import Schema
+import { authClientService } from "@/services/Client/auth-client.service"; // Import service mới
+import { useRouter } from "next/navigation"; // Để chuyển hướng sau khi login
 
 export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -23,6 +25,9 @@ export default function AuthPage() {
   const [role, setRole] = useState<"candidate" | "recruiter">("candidate");
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = useState(false); // Thêm state loading để quản lý UI
+  const router = useRouter();
+
   const loginForm = useForm<LoginPayload>({
     resolver: zodResolver(LoginSchema),
     mode: "onChange",
@@ -70,14 +75,38 @@ export default function AuthPage() {
     };
     reader.readAsDataURL(file);
   };
-
-  const onLoginSubmit = (data: LoginPayload) => {
-    console.log("LOGIN:", data);
+  const onLoginSubmit = async (data: LoginPayload) => {
+    setLoading(true);
+    try {
+      const response = await authClientService.login(data);
+      if (response.success) {
+        alert("Đăng nhập thành công!");
+        router.push("/"); // Chuyển hướng sau khi thành công
+      }
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const onRegisterSubmit = (data: RegisterPayload) => {
-    console.log("REGISTER:", data);
+  const onRegisterSubmit = async (data: RegisterPayload) => {
+    setLoading(true);
+    try {
+      const response = await authClientService.register(data);
+      if (response.success) {
+        alert("Đăng ký thành công! Hãy đăng nhập.");
+        // Có thể tự động chuyển sang tab login hoặc reload
+        window.location.reload();
+      }
+    } catch (error: any) {
+      alert(error.message);
+    } finally {
+      setLoading(false);
+    }
   };
+
+
   return (
     <div className="w-full h-screen grid lg:grid-cols-2">
       {/* --- LEFT SIDE: MARKETING --- */}
@@ -188,8 +217,12 @@ export default function AuthPage() {
                   </Link>
                 </div>
 
-                <Button className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-base font-semibold shadow-lg shadow-blue-600/20">
-                  Đăng nhập <ArrowRight className="w-4 h-4 ml-2" />
+                <Button className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-base font-semibold shadow-lg shadow-blue-600/20"
+                  disabled={loading}
+
+                >
+                  {loading ? "Đang xử lý..." : "Đăng nhập"} <ArrowRight className="w-4 h-4 ml-2" />
+
                 </Button>
               </form>
             </TabsContent>
@@ -310,8 +343,12 @@ export default function AuthPage() {
                   </div>
                 </div>
 
-                <Button className="w-full h-11 bg-blue-600 hover:bg-blue-700 font-semibold shadow-lg shadow-blue-600/20">
-                  Tạo tài khoản mới
+                <Button className="w-full h-11 bg-blue-600 hover:bg-blue-700 font-semibold shadow-lg shadow-blue-600/20"
+                  disabled={loading}
+
+                >
+                  {loading ? "Đang tạo tài khoản..." : "Tạo tài khoản mới"}
+
                 </Button>
               </form>
             </TabsContent>

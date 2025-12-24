@@ -22,5 +22,6 @@ export const RegisterSchema = LoginSchema.extend({
   avatar: z.string().optional(),
 });
 
+
 export type LoginPayload = z.infer<typeof LoginSchema>;
 export type RegisterPayload = z.infer<typeof RegisterSchema>;

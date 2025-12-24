@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react"; // 1. Import useState
+import { useState,useEffect } from "react"; // 1. Import useState
+import { useRouter } from "next/navigation"; // Thêm router để chuyển trang
 
 import Link from "next/link";
 import { 
@@ -14,12 +15,19 @@ import {
   ChevronDown, 
   Menu,
   MessageSquarePlus,
-  ArrowRight,X
+  ArrowRight,X,LogOut, User as UserIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"; // Giả định bạn có shadcn dropdown
 // Dữ liệu mẫu giống hệt trong file HTML tham khảo
 const TEMPLATES = [
   { 
@@ -90,7 +98,25 @@ const TEMPLATES = [
 
 export default function TemplatesPage() {
       const [viewingTemplate, setViewingTemplate] = useState<typeof TEMPLATES[0] | null>(null);
+  const [user, setUser] = useState<any>(null);
+const router = useRouter();
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.error("Lỗi parse user:", e);
+      }
+    }
+  }, []);
 
+  const handleLogout = () => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("user");
+    setUser(null);
+    router.push("/auth"); // Chuyển về trang auth (login)
+  };
   return (
     <div className="flex flex-col min-h-screen bg-[#f6f7f8] text-slate-900 font-sans">
       
@@ -115,10 +141,49 @@ export default function TemplatesPage() {
             <Link href="#" className="text-slate-700 transition-colors hover:text-[#136dec]">Blog</Link>
             <Link href="#" className="text-slate-700 transition-colors hover:text-[#136dec]">Hồ sơ của tôi</Link>
           </nav>
-          <Button className="h-10 px-4 text-sm font-bold text-white transition-colors bg-[#136dec] hover:bg-blue-600 rounded-lg">
-            Đăng nhập
-          </Button>
+          {user ? (
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium text-slate-600">Chào, <span className="font-bold text-slate-900">{user.name}</span></span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="relative size-10 overflow-hidden rounded-full border-2 border-[#136dec] transition-transform hover:scale-105 outline-none">
+                    {user.avatarUrl ? (
+                      <img src={user.avatarUrl} alt="avatar" className="size-full object-cover" />
+                    ) : (
+                      <div className="size-full bg-blue-100 flex items-center justify-center text-[#136dec] font-bold">
+                        {user.name?.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 mt-2">
+                  <DropdownMenuLabel>Tài khoản của tôi</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="cursor-pointer">
+                    <UserIcon className="mr-2 h-4 w-4" /> Hồ sơ cá nhân
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="cursor-pointer">
+                    <Briefcase className="mr-2 h-4 w-4" /> CV đã tạo
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={handleLogout}
+                    className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
+                  >
+                    <LogOut className="mr-2 h-4 w-4" /> Đăng xuất
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : (
+            <Link href="/auth">
+              <Button className="h-10 px-4 text-sm font-bold text-white transition-colors bg-[#136dec] hover:bg-blue-600 rounded-lg">
+                Đăng nhập
+              </Button>
+            </Link>
+          )}
         </div>
+
 
         {/* Mobile Menu Button */}
         <Button variant="ghost" size="icon" className="lg:hidden">
