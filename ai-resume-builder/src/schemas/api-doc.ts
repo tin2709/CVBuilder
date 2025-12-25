@@ -2,6 +2,13 @@ import { createRoute } from '@hono/zod-openapi';
 import * as auth from './auth.schema';
 import * as cand from './candidate.schema';
 import * as job from './job.schema';
+import { z } from '@hono/zod-openapi';
+import * as qa from './qa.schema';
+
+const AdminReviewSchema = z.object({
+  action: z.enum(['APPROVE', 'REJECT']),
+  message: z.string().optional() // Lý do từ chối nếu có
+});
 
 // --- Auth Routes Docs ---
 export const registerRouteDoc = createRoute({
@@ -165,5 +172,144 @@ export const getMyJobsDoc = createRoute({
       content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
       description: 'Lỗi hệ thống' 
     },
+  },
+});
+// 1. Gửi câu hỏi
+// src/schemas/api-doc.ts
+
+// 1. Hỏi
+export const askQuestionDoc = createRoute({
+  method: 'post',
+  path: '/ask',
+  summary: 'Ứng viên đặt câu hỏi',
+  request: { body: { content: { 'application/json': { schema: qa.AskQuestionSchema } } } },
+  responses: {
+    201: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Thành công' },
+    400: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Lỗi dữ liệu/Spam' },
+    401: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Chưa đăng nhập' },
+    404: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Không thấy bài đăng' }, // THÊM DÒNG NÀY
+  },
+});
+
+// 2. Trả lời
+export const answerQuestionDoc = createRoute({
+  method: 'put',
+  path: '/answer/{id}',
+  summary: 'Nhà tuyển dụng phản hồi',
+  request: { 
+    params: job.JobIdParamSchema, 
+    body: { content: { 'application/json': { schema: qa.AnswerQuestionSchema } } } 
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Thành công' },
+    400: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Lỗi hệ thống' }, // THÊM DÒNG NÀY
+    401: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Chưa đăng nhập' }, // THÊM DÒNG NÀY
+    403: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Không có quyền' },
+    404: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Không thấy câu hỏi' }, // THÊM DÒNG NÀY
+  },
+});
+
+// 3. Lấy danh sách Q&A cho một bài Job
+export const getJobQADoc = createRoute({
+  method: 'get',
+  path: '/jobs/{id}/qa',
+  summary: 'Lấy danh sách Q&A (Hỗ trợ ẩn/hiện theo quyền)',
+  request: { params: job.JobIdParamSchema },
+  responses: {
+    200: { content: { 'application/json': { schema: qa.QAListResponseSchema } }, description: 'Thành công' },
+  },
+});
+// 1. Gửi yêu cầu TẠO
+export const requestCreateCompanyDoc = createRoute({
+  method: 'post',
+  path: '/request-create',
+  summary: 'Recruiter gửi yêu cầu thêm công ty',
+  request: { body: { content: { 'application/json': { schema: job.CreateCompanySchema } } } },
+  responses: { 
+    201: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Thành công' },
+    400: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Lỗi dữ liệu' },
+    401: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Chưa đăng nhập' },
+  },
+});
+
+// 2. Gửi yêu cầu SỬA
+// src/schemas/api-doc.ts
+
+export const requestUpdateCompanyDoc = createRoute({
+  method: 'put',
+  path: '/request-update/{id}',
+  summary: 'Recruiter gửi yêu cầu sửa đổi thông tin',
+  request: { 
+    params: job.JobIdParamSchema,
+    body: { content: { 'application/json': { schema: job.CreateCompanySchema.partial() } } } 
+  },
+  responses: { 
+    200: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Cập nhật thành công' 
+    },
+    // BẮT BUỘC: Thêm tất cả các mã status code xuất hiện trong code của bạn
+    400: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Lỗi dữ liệu' 
+    },
+    401: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Chưa đăng nhập' 
+    },
+    403: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Không có quyền sở hữu công ty này' 
+    },
+    404: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Không tìm thấy công ty' 
+    },
+  },
+});
+
+// 3. Gửi yêu cầu XÓA
+export const requestDeleteCompanyDoc = createRoute({
+  method: 'delete',
+  path: '/request-delete/{id}',
+  summary: 'Recruiter gửi yêu cầu xóa',
+  request: { params: job.JobIdParamSchema },
+  responses: { 
+    200: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Thành công' },
+    400: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Lỗi hệ thống' },
+    401: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Chưa đăng nhập' },
+    403: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Không có quyền' },
+  },
+});
+
+// 4. Admin duyệt TẠO/XÓA
+export const adminReviewStatusDoc = createRoute({
+  method: 'patch',
+  path: '/admin/review-status/{id}',
+  summary: 'Admin duyệt Tạo/Xóa',
+  request: { 
+    params: job.JobIdParamSchema, 
+    body: { content: { 'application/json': { schema: AdminReviewSchema } } } 
+  },
+  responses: { 
+    200: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Thành công' },
+    400: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Lỗi dữ liệu' },
+    404: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Không tìm thấy' },
+  },
+});
+
+// 5. Admin duyệt SỬA
+export const adminReviewUpdateDoc = createRoute({
+  method: 'patch',
+  path: '/admin/review-update/{id}',
+  summary: 'Admin duyệt bản thảo sửa đổi',
+  request: { 
+    params: job.JobIdParamSchema, 
+    body: { content: { 'application/json': { schema: AdminReviewSchema } } } 
+  },
+  responses: { 
+    200: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Thành công' },
+    400: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Lỗi dữ liệu' },
+    404: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Không tìm thấy' },
   },
 });

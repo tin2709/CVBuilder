@@ -59,3 +59,10 @@ export const GetMyJobsResponseSchema = z.object({
     deadline: z.string().nullable(),
   })),
 }).openapi('GetMyJobsResponse');
+export const CreateCompanySchema = z.object({
+  name: z.string().min(2).openapi({ example: 'Công ty Công nghệ Huân Lâm' }),
+  description: z.string().optional().openapi({ example: 'Chuyên thiết kế nội thất và giải pháp F&B' }),
+  address: z.string().openapi({ example: '350 Nguyễn Thị Minh Khai, Phường Bàn Cờ, TPHCM' }),
+  website: z.string().url().optional().openapi({ example: 'https://huanlam.vn' }),
+  logoUrl: z.string().url().optional().openapi({ example: 'https://cdn.com/logo.png' }),
+}).openapi('CreateCompanyRequest');

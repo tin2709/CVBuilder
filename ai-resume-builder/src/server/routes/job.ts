@@ -183,10 +183,15 @@ jobRoute.openapi(getMyJobsDoc, async (c) => {
         id: true,
         title: true,
         companyName: true,
+        description:true,
+        salaryRange:true,
         location: true,
         status: true,
         createdAt: true,
         deadline: true,
+        applyLink:true,
+        hotline:true,
+        questions:true
       }
     });
 

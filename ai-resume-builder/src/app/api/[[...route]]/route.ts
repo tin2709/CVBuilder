@@ -5,6 +5,8 @@ import resumeRoute from '@/server/routes/resume'
 import authRoute from '@/server/routes/auth'
 import candidateRoute from '@/server/routes/candidate'
 import jobRoute from '@/server/routes/job'
+import qaRoute from '@/server/routes/qa'
+import companyRoute from '@/server/routes/company'
 import { initRedisIndices } from '@/lib/redis-init'
 
 // Khởi tạo Redis Indices
@@ -48,6 +50,9 @@ const routes = app
   .route('/auth', authRoute)
   .route('/candidates', candidateRoute)
   .route('/jobs', jobRoute) // Gộp jobRoute vào
+  .route('/qa', qaRoute) // THÊM DÒNG NÀY
+  .route('/companies', companyRoute) // THÊM DÒNG NÀY
+
 
 /**
  * Export AppType để Frontend nhận diện Type-safe (Hono RPC)

@@ -22,6 +22,10 @@ model User {
   // Quan hệ ngược
   candidateProfile CandidateProfile?
   jobs             Job[]             // Nếu là Recruiter thì có nhiều Job
+  sentQuestions     Question[] @relation("SentQuestions")
+  companyId   String?  @db.ObjectId
+  company     Company? @relation(fields: [companyId], references: [id])
+  receivedQuestions Question[] @relation("ReceivedQuestions")
 }
 
 // 2. Hồ sơ Ứng viên
@@ -56,9 +60,11 @@ model Job {
   
   status      JobStatus @default(OPEN)
   createdAt   DateTime  @default(now())
-
+  questions   Question[]
   recruiterId String   @db.ObjectId
   recruiter   User     @relation(fields: [recruiterId], references: [id])
+  companyId   String?  @db.ObjectId
+  company     Company? @relation(fields: [companyId], references: [id])
   applications Application[]
 }
 // 4. Đơn ứng tuyển (Bảng nối giữa Job và Candidate)
@@ -97,6 +103,51 @@ model Otp {
   createdAt DateTime @default(now())
 
   @@unique([email, purpose]) // Mỗi email tại một thời điểm chỉ có 1 mã cho 1 mục đích
+}
+model Question {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  content     String   // Câu hỏi từ Ứng viên
+  answer      String?  // Câu trả lời từ Nhà tuyển dụng (null nếu chưa phản hồi)
+  isPublic    Boolean  @default(false) // Nhà tuyển dụng có cho phép mọi người cùng xem?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Quan hệ
+  jobId       String   @db.ObjectId
+  job         Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  senderId    String   @db.ObjectId // Người hỏi (Candidate)
+  sender      User     @relation("SentQuestions", fields: [senderId], references: [id])
+
+  recruiterId String   @db.ObjectId // Người trả lời (Recruiter)
+  recruiter   User     @relation("ReceivedQuestions", fields: [recruiterId], references: [id])
+}
+model Company {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  name            String   @unique
+  description     String?
+  address         String?
+  website         String?
+  logoUrl         String?
+  status          CompanyStatus @default(PENDING)
+  
+  // TRƯỜNG QUAN TRỌNG: Lưu các thay đổi đang chờ Admin duyệt
+  // Ví dụ: { "address": "Địa chỉ mới", "website": "https://newsite.com" }
+  pendingChanges  Json?    
+  
+  createdBy       String   @db.ObjectId
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  recruiters      User[]   
+  jobs            Job[]    
+}
+enum CompanyStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  DELETING // Đang chờ xóa
 }
 
 enum OtpPurpose {
