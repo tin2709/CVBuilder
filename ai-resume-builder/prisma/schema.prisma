@@ -44,18 +44,23 @@ model CandidateProfile {
 model Job {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   title       String
-  description String
+  companyName String?  // Tên công ty/nhà máy
+  description String   // Mô tả chi tiết công việc
+  requirements String  // Yêu cầu công việc
   location    String
   salaryRange String?
+  startDate   DateTime? // Thời gian dự kiến đi làm
+  deadline    DateTime? // Hạn nộp hồ sơ
+  applyLink   String?   // Link đăng ký (bit.ly...)
+  hotline     String?   // Hotline liên hệ
+  
   status      JobStatus @default(OPEN)
   createdAt   DateTime  @default(now())
 
   recruiterId String   @db.ObjectId
   recruiter   User     @relation(fields: [recruiterId], references: [id])
-
   applications Application[]
 }
-
 // 4. Đơn ứng tuyển (Bảng nối giữa Job và Candidate)
 model Application {
   id           String   @id @default(auto()) @map("_id") @db.ObjectId

@@ -4,6 +4,7 @@ import { handle } from 'hono/vercel'
 import resumeRoute from '@/server/routes/resume'
 import authRoute from '@/server/routes/auth'
 import candidateRoute from '@/server/routes/candidate'
+import jobRoute from '@/server/routes/job'
 import { initRedisIndices } from '@/lib/redis-init'
 
 // Khởi tạo Redis Indices
@@ -46,6 +47,7 @@ const routes = app
   .route('/resumes', resumeRoute)
   .route('/auth', authRoute)
   .route('/candidates', candidateRoute)
+  .route('/jobs', jobRoute) // Gộp jobRoute vào
 
 /**
  * Export AppType để Frontend nhận diện Type-safe (Hono RPC)
