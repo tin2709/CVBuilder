@@ -20,7 +20,8 @@ model User {
   createdAt DateTime @default(now())
 
   // Quan hệ ngược
-  candidateProfile CandidateProfile?
+  candidateProfiles CandidateProfile[]
+
   jobs             Job[]             // Nếu là Recruiter thì có nhiều Job
   sentQuestions     Question[] @relation("SentQuestions")
   companyId   String?  @db.ObjectId
@@ -31,7 +32,7 @@ model User {
 // 2. Hồ sơ Ứng viên
 model CandidateProfile {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId      String   @unique @db.ObjectId
+  userId String @db.ObjectId
   user        User     @relation(fields: [userId], references: [id])
   
   headline    String?  // Ví dụ: Senior React Developer
@@ -93,6 +94,8 @@ model Interview {
   date          DateTime
   notes         String?
   rating        Int?     // Đánh giá 1-5 sao
+  status        InterviewStatus @default(PENDING)
+
 }
 model Otp {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId
@@ -172,4 +175,9 @@ enum AppStatus {
   INTERVIEW
   OFFERED
   REJECTED
+}
+enum InterviewStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
 }

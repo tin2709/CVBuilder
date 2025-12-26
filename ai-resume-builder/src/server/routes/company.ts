@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 import { verifyRole } from '@/middlewares/auth.middleware';
 import * as doc from '@/schemas/api-doc';
 
-// Định nghĩa kiểu dữ liệu cho Context
+// Định nghĩa kiểu dữ liệu cho Context Variables
 type Variables = {
   jwtPayload: {
     id: string;
@@ -12,33 +12,36 @@ type Variables = {
   }
 }
 
-// 1. Phải khai báo Variables ở đây
 const companyRoute = new OpenAPIHono<{ Variables: Variables }>();
 
-// 2. Sử dụng dấu '*' để đảm bảo middleware chạy cho MỌI route trong file này
-companyRoute.use('/request-update/{id}', verifyRole('RECRUITER'));
-companyRoute.use('/request-delete/{id}', verifyRole('RECRUITER'));
+/**
+ * --- PHÂN TẦNG MIDDLEWARE ---
+ * Thiết lập quyền truy cập cho từng nhóm API dựa trên đường dẫn (path)
+ */
 
-// [API TẠO YÊU CẦU CÔNG TY]
+// 1. Nhóm API dành cho Nhà tuyển dụng (Recruiter)
+companyRoute.use('/request-create', verifyRole('RECRUITER'));
+companyRoute.use('/request-update/:id', verifyRole('RECRUITER'));
+companyRoute.use('/request-delete/:id', verifyRole('RECRUITER'));
+
+// 2. Nhóm API dành cho Quản trị viên (Admin)
+// Sử dụng wildcard '*' để bảo vệ tất cả các route bắt đầu bằng /admin/
+companyRoute.use('/admin/*', verifyRole('ADMIN'));
+
+
+/**
+ * --- NHÓM API: RECRUITER (YÊU CẦU CÔNG TY) ---
+ */
+
+// [API: TẠO CÔNG TY]
 companyRoute.openapi(doc.requestCreateCompanyDoc, async (c) => {
-  // 3. Lấy payload từ key 'jwtPayload' (khớp với middleware của bạn)
   const payload = c.get('jwtPayload');
-
-  // 4. KIỂM TRA AN TOÀN TRƯỚC KHI ĐỌC .id
-  if (!payload || !payload.id) {
-    console.error("DEBUG: Payload is missing or id is undefined", payload);
-    return c.json({ 
-      success: false, 
-      message: "Lỗi xác thực: Không tìm thấy ID người dùng trong Token. Vui lòng đăng nhập lại." 
-    }, 401);
-  }
-
   const body = c.req.valid('json');
 
   try {
-    // 5. Sử dụng Transaction để tạo Company và gắn vào User cùng lúc
+    // Sử dụng Transaction để đảm bảo tính toàn vẹn dữ liệu
     const result = await prisma.$transaction(async (tx) => {
-      // Tạo công ty
+      // 1. Tạo bản ghi công ty mới ở trạng thái PENDING
       const company = await tx.company.create({
         data: { 
           ...body, 
@@ -47,7 +50,7 @@ companyRoute.openapi(doc.requestCreateCompanyDoc, async (c) => {
         }
       });
 
-      // Cập nhật User gắn companyId
+      // 2. Cập nhật user để liên kết với công ty vừa tạo
       await tx.user.update({
         where: { id: payload.id },
         data: { companyId: company.id }
@@ -70,50 +73,35 @@ companyRoute.openapi(doc.requestCreateCompanyDoc, async (c) => {
     }, 400);
   }
 });
+
+// [API: CẬP NHẬT CÔNG TY]
 companyRoute.openapi(doc.requestUpdateCompanyDoc, async (c) => {
-  // 1. Lấy payload từ JWT
   const payload = c.get('jwtPayload');
-  
-  // LOG ĐỂ KIỂM TRA (Hãy nhìn vào terminal sau khi bấm Send ở Postman)
-  console.log("Dữ liệu trong Token của bạn là:", payload);
-
-  const recruiterId = payload?.id;
-
-  // 2. Kiểm tra nếu Token thiếu trường id
-  if (!recruiterId) {
-    return c.json({ 
-      success: false, 
-      message: "Token hợp lệ nhưng không chứa ID người dùng. Hãy kiểm tra lại logic tạo Token (Login)." 
-    }, 401);
-  }
-
   const { id: companyId } = c.req.valid('param');
   const newData = c.req.valid('json');
 
   try {
-    // 3. Tìm công ty
     const company = await prisma.company.findUnique({ where: { id: companyId } });
 
     if (!company) {
       return c.json({ success: false, message: "Công ty không tồn tại" }, 404);
     }
 
-    // 4. SO SÁNH: Đây là bước bạn yêu cầu kiểm tra
-    // Chuyển đổi về String để so sánh chính xác nhất
-    if (company.createdBy.toString() !== recruiterId.toString()) {
-      return c.json({ 
-        success: false, 
-        message: "Bạn không phải chủ sở hữu. Quyền truy cập bị từ chối!" 
-      }, 403);
+    // Kiểm tra quyền sở hữu
+    if (company.createdBy !== payload.id) {
+      return c.json({ success: false, message: "Bạn không phải chủ sở hữu công ty này" }, 403);
     }
 
-    // 5. Nếu trùng khớp -> Tiếp tục logic update
+    // Nếu công ty chưa được duyệt (vẫn đang PENDING) -> Cho phép sửa trực tiếp
     if (company.status === 'PENDING') {
-      await prisma.company.update({ where: { id: companyId }, data: newData });
-      return c.json({ success: true, message: "Đã cập nhật trực tiếp thông tin bản thảo" }, 200);
+      const updated = await prisma.company.update({ 
+        where: { id: companyId }, 
+        data: newData 
+      });
+      return c.json({ success: true, message: "Đã cập nhật trực tiếp bản thảo", data: updated }, 200);
     }
 
-    // Nếu đã APPROVED -> Lưu vào pendingChanges
+    // Nếu đã APPROVED -> Lưu thay đổi vào trường tạm 'pendingChanges' chờ Admin duyệt
     await prisma.company.update({
       where: { id: companyId },
       data: { pendingChanges: newData as any }
@@ -125,72 +113,97 @@ companyRoute.openapi(doc.requestUpdateCompanyDoc, async (c) => {
     return c.json({ success: false, message: error.message }, 400);
   }
 });
-// [XÓA]
+
+// [API: XÓA CÔNG TY]
 companyRoute.openapi(doc.requestDeleteCompanyDoc, async (c) => {
   const payload = c.get('jwtPayload');
   const { id } = c.req.valid('param');
 
   const company = await prisma.company.findUnique({ where: { id } });
-  if (!company || company.createdBy !== payload.id) return c.json({ success: false, message: "Không có quyền" }, 403);
-
-  if (company.status === 'PENDING' || company.status === 'REJECTED') {
-    await prisma.company.delete({ where: { id } });
-    return c.json({ success: true, message: "Đã xóa yêu cầu" }, 200);
+  
+  if (!company) {
+    return c.json({ success: false, message: "Công ty không tồn tại" }, 404);
   }
 
-  await prisma.company.update({ where: { id }, data: { status: 'DELETING' } });
+  if (company.createdBy !== payload.id) {
+    return c.json({ success: false, message: "Bạn không có quyền thực hiện thao tác này" }, 403);
+  }
+
+  // Nếu là bản nháp chưa duyệt hoặc đã bị từ chối -> Xóa luôn khỏi DB
+  if (company.status === 'PENDING' || company.status === 'REJECTED') {
+    await prisma.company.delete({ where: { id } });
+    return c.json({ success: true, message: "Đã xóa yêu cầu thành công" }, 200);
+  }
+
+  // Nếu đã APPROVED -> Chuyển trạng thái sang DELETING chờ Admin phê duyệt xóa
+  await prisma.company.update({ 
+    where: { id }, 
+    data: { status: 'DELETING' } 
+  });
+
   return c.json({ success: true, message: "Yêu cầu xóa đang chờ Admin duyệt" }, 200);
 });
 
 
-// --- PHẦN ADMIN ---
+/**
+ * --- NHÓM API: ADMIN (DUYỆT YÊU CẦU) ---
+ * Lưu ý: Tất cả các route này phải bắt đầu bằng /admin/ để middleware verifyRole('ADMIN') có tác dụng
+ */
 
-// [DUYỆT TẠO/XÓA]
+// [ADMIN: DUYỆT TRẠNG THÁI TẠO/XÓA]
 companyRoute.openapi(doc.adminReviewStatusDoc, async (c) => {
   const { id } = c.req.valid('param');
   const { action } = c.req.valid('json');
 
   const company = await prisma.company.findUnique({ where: { id } });
-  if (!company) return c.json({ success: false, message: "Không tìm thấy" }, 404);
+  if (!company) return c.json({ success: false, message: "Không tìm thấy công ty" }, 404);
 
   if (action === 'REJECT') {
     await prisma.company.update({ where: { id }, data: { status: 'REJECTED' } });
     return c.json({ success: true, message: "Đã từ chối yêu cầu" });
   }
 
-  // Nếu duyệt APPROVED
+  // Duyệt cho phép tạo (Từ PENDING sang APPROVED)
   if (company.status === 'PENDING') {
     await prisma.company.update({ where: { id }, data: { status: 'APPROVED' } });
   } 
-  // Nếu duyệt XÓA (đang ở trạng thái DELETING)
+  // Duyệt cho phép xóa (Từ DELETING -> Xóa khỏi DB)
   else if (company.status === 'DELETING') {
     await prisma.company.delete({ where: { id } });
-    return c.json({ success: true, message: "Đã xóa công ty vĩnh viễn" });
+    return c.json({ success: true, message: "Đã xóa công ty vĩnh viễn khỏi hệ thống" });
   }
 
-  return c.json({ success: true, message: "Đã phê duyệt thành công" });
+  return c.json({ success: true, message: "Thao tác phê duyệt hoàn tất" });
 });
 
-// [DUYỆT SỬA]
+// [ADMIN: DUYỆT NỘI DUNG SỬA ĐỔI]
 companyRoute.openapi(doc.adminReviewUpdateDoc, async (c) => {
   const { id } = c.req.valid('param');
   const { action } = c.req.valid('json');
 
   const company = await prisma.company.findUnique({ where: { id } });
-  if (!company || !company.pendingChanges) return c.json({ success: false, message: "Không có bản thảo" }, 404);
-
-  if (action === 'REJECT') {
-    await prisma.company.update({ where: { id }, data: { pendingChanges: null } });
-    return c.json({ success: true, message: "Đã từ chối bản sửa đổi" });
+  
+  if (!company || !company.pendingChanges) {
+    return c.json({ success: false, message: "Không tìm thấy bản thảo thay đổi" }, 404);
   }
 
+  if (action === 'REJECT') {
+    // Xóa bỏ các thay đổi đang chờ, giữ nguyên dữ liệu cũ
+    await prisma.company.update({ where: { id }, data: { pendingChanges: null } });
+    return c.json({ success: true, message: "Đã từ chối các bản sửa đổi" });
+  }
+
+  // Chấp nhận: Ghi đè dữ liệu từ pendingChanges vào các trường chính
   const changes = company.pendingChanges as object;
   await prisma.company.update({
     where: { id },
-    data: { ...changes, pendingChanges: null }
+    data: { 
+      ...changes, 
+      pendingChanges: null // Xóa bản thảo sau khi đã áp dụng
+    }
   });
 
-  return c.json({ success: true, message: "Thông tin công ty đã được cập nhật" });
+  return c.json({ success: true, message: "Thông tin công ty đã được cập nhật chính thức" });
 });
 
 export default companyRoute;

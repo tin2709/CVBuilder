@@ -7,6 +7,9 @@ import candidateRoute from '@/server/routes/candidate'
 import jobRoute from '@/server/routes/job'
 import qaRoute from '@/server/routes/qa'
 import companyRoute from '@/server/routes/company'
+import interviewRoute from '@/server/routes/interview'
+import applicationRoute from '@/server/routes/application'
+
 import { initRedisIndices } from '@/lib/redis-init'
 
 // Khởi tạo Redis Indices
@@ -34,6 +37,7 @@ app.doc('/doc', {
     title: 'AI Resume Builder API',
     description: 'Tài liệu hướng dẫn sử dụng API hệ thống',
   },
+
 })
 
 /**
@@ -52,6 +56,8 @@ const routes = app
   .route('/jobs', jobRoute) // Gộp jobRoute vào
   .route('/qa', qaRoute) // THÊM DÒNG NÀY
   .route('/companies', companyRoute) // THÊM DÒNG NÀY
+  .route('/interviews', interviewRoute) // THÊM DÒNG NÀY
+  .route('/applications', applicationRoute) // THÊM DÒNG NÀY
 
 
 /**
