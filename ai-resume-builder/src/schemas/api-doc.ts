@@ -6,6 +6,7 @@ import { z } from '@hono/zod-openapi';
 import * as qa from './qa.schema';
 import * as interview from './interview.schema'; // Đường dẫn file schema của bạn
 import * as application from './application.schema';
+import * as review from './review.schema';
 
 
 const AdminReviewSchema = z.object({
@@ -188,6 +189,30 @@ export const getMyJobsDoc = createRoute({
     400: { 
       content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
       description: 'Lỗi hệ thống' 
+    },
+  },
+});
+// Thêm vào file src/schemas/api-doc.ts
+export const toggleSaveJobDoc = createRoute({
+  method: 'post',
+  path: '/{id}/save',
+  tags: [TAG_JOBS],
+  summary: 'Lưu hoặc Bỏ lưu công việc (Toggle)',
+  request: { 
+    params: job.JobIdParamSchema 
+  },
+  responses: {
+    200: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Thành công' 
+    },
+    401: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Chưa đăng nhập' 
+    },
+    404: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Không tìm thấy Job' 
     },
   },
 });
@@ -499,5 +524,77 @@ export const bulkDeleteApplicationsDoc = createRoute({
   responses: {
     200: { description: 'Thành công' },
     400: { description: 'Lỗi dữ liệu' }
+  },
+});
+const TAG_REVIEWS = 'Company Reviews';
+
+// 1. Lấy danh sách review
+export const getCompanyReviewsDoc = createRoute({
+  method: 'get',
+  path: '/{companyId}/all',
+  tags: [TAG_REVIEWS],
+  summary: 'Lấy danh sách đánh giá của một công ty',
+  request: { params: review.CompanyIdParamSchema },
+  responses: {
+    200: { content: { 'application/json': { schema: z.array(review.ReviewResponseSchema) } }, description: 'Thành công' },
+  },
+});
+
+// 2. Gửi review mới
+export const postReviewDoc = createRoute({
+  method: 'post',
+  path: '/{companyId}/create',
+  tags: [TAG_REVIEWS],
+  summary: 'Ứng viên gửi đánh giá mới',
+  request: { 
+    params: review.CompanyIdParamSchema,
+    body: { content: { 'application/json': { schema: review.CreateReviewSchema } } } 
+  },
+  responses: {
+    201: { content: { 'application/json': { schema: review.ErrorResponseSchema } }, description: 'Thành công' },
+    400: { content: { 'application/json': { schema: review.ErrorResponseSchema } }, description: 'Đã review' },
+    403: { content: { 'application/json': { schema: review.ErrorResponseSchema } }, description: 'Không có quyền (Chỉ Candidate)' }, // THÊM DÒNG NÀY
+  },
+});
+
+// 2. Update Review Doc
+export const updateReviewDoc = createRoute({
+  method: 'put',
+  path: '/{id}/update',
+  tags: [TAG_REVIEWS],
+  summary: 'Chỉnh sửa đánh giá của chính mình',
+  request: { 
+    params: review.ReviewIdParamSchema,
+    body: { content: { 'application/json': { schema: review.CreateReviewSchema } } } 
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: review.ErrorResponseSchema } }, description: 'Thành công' },
+    403: { content: { 'application/json': { schema: review.ErrorResponseSchema } }, description: 'Không có quyền' },
+    404: { content: { 'application/json': { schema: review.ErrorResponseSchema } }, description: 'Không tìm thấy review' }, // THÊM DÒNG NÀY
+  },
+});
+
+// 3. Delete Review Doc
+export const deleteReviewDoc = createRoute({
+  method: 'delete',
+  path: '/{id}/delete',
+  tags: [TAG_REVIEWS],
+  summary: 'Xóa đánh giá (Chủ nhân hoặc Admin)',
+  request: { params: review.ReviewIdParamSchema },
+  responses: {
+    200: { content: { 'application/json': { schema: review.ErrorResponseSchema } }, description: 'Thành công' },
+    403: { content: { 'application/json': { schema: review.ErrorResponseSchema } }, description: 'Không có quyền' }, // THÊM DÒNG NÀY
+    404: { content: { 'application/json': { schema: review.ErrorResponseSchema } }, description: 'Không tìm thấy review' }, // THÊM DÒNG NÀY
+  },
+});
+// 5. Lấy điểm trung bình
+export const getCompanyRatingDoc = createRoute({
+  method: 'get',
+  path: '/{companyId}/rating',
+  tags: [TAG_REVIEWS],
+  summary: 'Tính toán điểm trung bình sao của công ty',
+  request: { params: review.CompanyIdParamSchema },
+  responses: {
+    200: { content: { 'application/json': { schema: review.RatingResponseSchema } }, description: 'Thành công' },
   },
 });

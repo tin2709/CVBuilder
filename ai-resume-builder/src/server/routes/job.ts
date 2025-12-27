@@ -1,5 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
-import { createJobDoc,updateJobDoc, deleteJobDoc,deleteManyJobsDoc,getMyJobsDoc } from '@/schemas/api-doc';
+import { createJobDoc,updateJobDoc, deleteJobDoc,deleteManyJobsDoc,getMyJobsDoc,toggleSaveJobDoc } from '@/schemas/api-doc';
 import { prisma } from '@/lib/db';
 import { verifyRole } from '@/middlewares/auth.middleware';
 
@@ -207,5 +207,35 @@ jobRoute.openapi(getMyJobsDoc, async (c) => {
   } catch (error: any) {
     return c.json({ success: false, message: error.message }, 400);
   }
+});
+jobRoute.use('/:id/save', verifyRole('CANDIDATE'));
+jobRoute.openapi(toggleSaveJobDoc, async (c) => {
+  const payload = c.get('jwtPayload');
+  const jobId = c.req.param('id');
+  const userId = payload.id;
+
+  // 1. Kiểm tra xem User đã lưu job này chưa
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { savedJobIds: true }
+  });
+
+  const isSaved = user?.savedJobIds.includes(jobId);
+
+  // 2. Sử dụng lệnh update với connect/disconnect của Prisma
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      savedJobs: isSaved 
+        ? { disconnect: { id: jobId } } // Nếu đã lưu thì bỏ lưu
+        : { connect: { id: jobId } }    // Nếu chưa lưu thì lưu
+    }
+  });
+
+  return c.json({
+    success: true,
+    message: isSaved ? "Đã xóa khỏi danh sách yêu thích" : "Đã lưu vào danh sách yêu thích",
+    isSaved: !isSaved
+  }, 200);
 });
 export default jobRoute;

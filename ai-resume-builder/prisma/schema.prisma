@@ -27,6 +27,10 @@ model User {
   companyId   String?  @db.ObjectId
   company     Company? @relation(fields: [companyId], references: [id])
   receivedQuestions Question[] @relation("ReceivedQuestions")
+  savedJobIds       String[]          @db.ObjectId
+  savedJobs         Job[]             @relation("UserSavedJobs", fields: [savedJobIds], references: [id])
+
+  reviews           Review[]
 }
 
 // 2. Hồ sơ Ứng viên
@@ -66,7 +70,10 @@ model Job {
   recruiter   User     @relation(fields: [recruiterId], references: [id])
   companyId   String?  @db.ObjectId
   company     Company? @relation(fields: [companyId], references: [id])
-  applications Application[]
+  savedByUserIds    String[] @db.ObjectId
+  savedByUsers      User[]   @relation("UserSavedJobs", fields: [savedByUserIds], references: [id])
+
+  applications      Application[]
 }
 // 4. Đơn ứng tuyển (Bảng nối giữa Job và Candidate)
 model Application {
@@ -145,6 +152,27 @@ model Company {
 
   recruiters      User[]   
   jobs            Job[]    
+  reviews         Review[]
+}
+
+// Model Đánh giá công ty
+model Review {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  content     String
+  rating      Int
+  
+  // --- FIX LỖI 4: Quan hệ Review - User ---
+  userId      String   @db.ObjectId
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // --- FIX LỖI 5: Quan hệ Review - Company ---
+  companyId   String   @db.ObjectId
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, companyId])
 }
 enum CompanyStatus {
   PENDING

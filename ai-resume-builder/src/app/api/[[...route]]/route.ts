@@ -9,6 +9,7 @@ import qaRoute from '@/server/routes/qa'
 import companyRoute from '@/server/routes/company'
 import interviewRoute from '@/server/routes/interview'
 import applicationRoute from '@/server/routes/application'
+import reviewRoute from '@/server/routes/review'
 
 import { initRedisIndices } from '@/lib/redis-init'
 
@@ -58,7 +59,7 @@ const routes = app
   .route('/companies', companyRoute) // THÊM DÒNG NÀY
   .route('/interviews', interviewRoute) // THÊM DÒNG NÀY
   .route('/applications', applicationRoute) // THÊM DÒNG NÀY
-
+  .route('/reviews', reviewRoute) // THÊM DÒNG NÀY
 
 /**
  * Export AppType để Frontend nhận diện Type-safe (Hono RPC)
