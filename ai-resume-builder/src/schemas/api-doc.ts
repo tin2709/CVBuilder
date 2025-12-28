@@ -7,7 +7,7 @@ import * as qa from './qa.schema';
 import * as interview from './interview.schema'; // Đường dẫn file schema của bạn
 import * as application from './application.schema';
 import * as review from './review.schema';
-
+import * as system from './system.schema';
 
 const AdminReviewSchema = z.object({
   action: z.enum(['APPROVE', 'REJECT']),
@@ -596,5 +596,120 @@ export const getCompanyRatingDoc = createRoute({
   request: { params: review.CompanyIdParamSchema },
   responses: {
     200: { content: { 'application/json': { schema: review.RatingResponseSchema } }, description: 'Thành công' },
+  },
+});
+export const getCategoriesDoc = createRoute({
+  method: 'get',
+  path: '/all',
+  tags: ['System - Categories'],
+  summary: 'Lấy danh sách tất cả danh mục công việc',
+  responses: {
+    200: { content: { 'application/json': { schema: z.array(system.CategorySchema) } }, description: 'Thành công' },
+   400: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Lỗi' 
+    },
+  },
+});
+
+export const createCategoryDoc = createRoute({
+  method: 'post',
+  path: '/create',
+  tags: ['System - Categories'],
+  summary: 'Admin tạo danh mục mới',
+  request: { body: { content: { 'application/json': { schema: system.CreateCategorySchema } } } },
+  responses: {
+    201: { content: { 'application/json': { schema: system.CategorySchema } }, description: 'Tạo thành công' },
+    403: { description: 'Không có quyền Admin' }
+  },
+});
+export const updateCategoryDoc = createRoute({
+  method: 'put',
+  path: '/{id}/update',
+  tags: ['System - Categories'],
+  summary: 'Admin cập nhật danh mục',
+  request: { 
+    params: system.CategoryIdParamSchema,
+    body: { content: { 'application/json': { schema: system.UpdateCategorySchema } } } 
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: system.CategorySchema } }, description: 'Cập nhật thành công' },
+    404: { description: 'Không tìm thấy danh mục' },
+    403: { description: 'Không có quyền Admin' }
+  },
+});
+
+// --- Delete Single Category ---
+export const deleteCategoryDoc = createRoute({
+  method: 'delete',
+  path: '/{id}/delete',
+  tags: ['System - Categories'],
+  summary: 'Admin xóa một danh mục',
+  request: { params: system.CategoryIdParamSchema },
+  responses: {
+    200: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Xóa thành công' },
+    404: { description: 'Không tìm thấy' }
+  },
+});
+
+// --- Delete Many Categories ---
+export const bulkDeleteCategoriesDoc = createRoute({
+  method: 'delete',
+  path: '/bulk-delete',
+  tags: ['System - Categories'],
+  summary: 'Admin xóa nhiều danh mục',
+  request: { body: { content: { 'application/json': { schema: system.BulkDeleteCategorySchema } } } },
+  responses: {
+    200: { content: { 'application/json': { schema: job.BulkDeleteResponseSchema } }, description: 'Xóa thành công' },
+    400: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Lỗi' },
+  },
+});
+
+// --- Notification Docs ---
+export const getMyNotificationsDoc = createRoute({
+  method: 'get',
+  path: '/all',
+  tags: ['User - Notifications'],
+  summary: 'Lấy thông báo của tôi',
+  responses: {
+    200: { content: { 'application/json': { schema: z.array(system.NotificationSchema) } }, description: 'Thành công' },
+      400: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Lỗi' 
+    },
+  },
+});
+// src/schemas/api-doc.ts
+
+export const createNotificationDoc = createRoute({
+  method: 'post',
+  path: '/create',
+  tags: ['User - Notifications'],
+  summary: 'Tạo thông báo mới (Admin/Hệ thống)',
+  request: { 
+    body: { content: { 'application/json': { schema: system.CreateNotificationSchema } } } 
+  },
+  responses: {
+    201: { 
+      content: { 'application/json': { schema: system.NotificationSchema } }, 
+      description: 'Tạo thông báo thành công' 
+    },
+    400: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Lỗi dữ liệu' 
+    },
+  },
+});
+export const markAsReadDoc = createRoute({
+  method: 'patch',
+  path: '/{id}/read',
+  tags: ['User - Notifications'],
+  summary: 'Đánh dấu thông báo là đã đọc',
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    200: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Thành công' },
+    400: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Lỗi' },
+    403: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Không quyền' },
+    404: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Không thấy' },
   },
 });

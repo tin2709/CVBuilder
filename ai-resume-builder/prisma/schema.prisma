@@ -31,6 +31,7 @@ model User {
   savedJobs         Job[]             @relation("UserSavedJobs", fields: [savedJobIds], references: [id])
 
   reviews           Review[]
+  notifications     Notification[]
 }
 
 // 2. Hồ sơ Ứng viên
@@ -72,7 +73,8 @@ model Job {
   company     Company? @relation(fields: [companyId], references: [id])
   savedByUserIds    String[] @db.ObjectId
   savedByUsers      User[]   @relation("UserSavedJobs", fields: [savedByUserIds], references: [id])
-
+  categoryId  String?  @db.ObjectId
+  category    Category? @relation(fields: [categoryId], references: [id])
   applications      Application[]
 }
 // 4. Đơn ứng tuyển (Bảng nối giữa Job và Candidate)
@@ -174,6 +176,35 @@ model Review {
 
   @@unique([userId, companyId])
 }
+model Category {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  name      String   @unique // Ví dụ: Công nghệ thông tin
+  slug      String   @unique // Ví dụ: cong-nghe-thong-tin
+  icon      String?  // Icon hiển thị trên giao diện
+  jobs      Job[]    // Quan hệ 1-Nhiều với Job
+}
+model Notification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title     String
+  message   String
+  type      NotificationType
+  isRead    Boolean  @default(false)
+  link      String?  // Link để click vào xem chi tiết (VD: /candidate/interviews/...)
+  
+  createdAt DateTime @default(now())
+}
+
+enum NotificationType {
+  APPLICATION_STATUS
+  NEW_INTERVIEW
+  AI_SCREENING_DONE
+  NEW_MESSAGE
+  SYSTEM
+}
+
 enum CompanyStatus {
   PENDING
   APPROVED
