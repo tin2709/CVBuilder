@@ -34,22 +34,75 @@ model User {
   notifications     Notification[]
 }
 
-// 2. Hồ sơ Ứng viên
+// 2. Hồ sơ Ứng viên (Mở rộng)
 model CandidateProfile {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId String @db.ObjectId
+  userId      String   @unique @db.ObjectId // Nên là unique
   user        User     @relation(fields: [userId], references: [id])
   
-  headline    String?  // Ví dụ: Senior React Developer
+  headline    String?  // VD: Intern Fullstack Developer
+  summary     String?  // Phần "Profile" trong CV của bạn
   phone       String?
-  cvUrl       String?  // Link PDF
-  skills      String[] // ["React", "NodeJS"]
-  experience  Json?    // Lưu dạng JSON cho linh hoạt
-  education   Json?
+  address     String?  // TP.HCM
+  githubUrl   String?
+  linkedinUrl String?
+  portfolioUrl String?
   
+  skills      String[] // ["React", "NestJS", "Spring Boot"]
+  softSkills  String[] // ["Teamwork", "Problem-solving"]
+  languages   Json?    // [{ "lang": "English", "level": "TOEIC 835" }]
+  
+  // Thay vì để Json chung chung, ta nên tạo Model để quản lý chặt chẽ:
+  workExperiences WorkExperience[]
+  projects        PersonalProject[]
+  educations      EducationRecord[]
+  
+  cvUrl       String?  
   applications Application[]
 }
 
+// Model cho Kinh nghiệm làm việc (như BitGroup trong CV)
+model WorkExperience {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  candidateProfileId String @db.ObjectId
+  candidateProfile CandidateProfile @relation(fields: [candidateProfileId], references: [id])
+  
+  companyName      String
+  role             String
+  startDate        DateTime
+  endDate          DateTime? // Null nếu đang làm việc
+  description      String?   // Mô tả dự án, Tech stack
+  responsibilities String[]  // Các gạch đầu dòng Key Responsibilities
+}
+
+// Model cho Dự án (như Online Video Editor, Trello Clone)
+model PersonalProject {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  candidateProfileId String @db.ObjectId
+  candidateProfile CandidateProfile @relation(fields: [candidateProfileId], references: [id])
+  
+  projectName      String
+  description      String?
+  techStack        String[]
+  features         String[] // Các tính năng chính
+  githubLink       String?
+  liveLink         String?
+  startDate        DateTime?
+  endDate          DateTime?
+}
+
+// Model cho Học vấn
+model EducationRecord {
+  id               String   @id @default(auto()) @map("_id") @db.ObjectId
+  candidateProfileId String @db.ObjectId
+  candidateProfile CandidateProfile @relation(fields: [candidateProfileId], references: [id])
+  
+  schoolName       String
+  major            String
+  startDate        DateTime?
+  endDate          DateTime?
+  gpa              String?
+}
 // 3. Tin tuyển dụng
 model Job {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId

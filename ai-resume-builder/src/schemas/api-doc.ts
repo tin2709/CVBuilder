@@ -92,6 +92,142 @@ export const candidateSearchDoc = createRoute({
     500: { content: { 'application/json': { schema: auth.ErrorResponseSchema } }, description: 'Lỗi server' },
   },
 });
+// --- CANDIDATE PROFILE MAIN ---
+export const updateCandidateProfileDoc = createRoute({
+  method: 'put',
+  path: '/me/update',
+  tags: [TAG_CANDIDATE],
+  summary: 'Cập nhật thông tin hồ sơ chính',
+  request: { body: { content: { 'application/json': { schema: cand.UpdateCandidateProfileSchema } } } },
+  responses: { 200: { description: 'Cập nhật thành công' } },
+});
+export const createCandidateProfileDoc = createRoute({
+  method: 'post',
+  path: '/me/create-profile',
+  tags: [TAG_CANDIDATE],
+  summary: 'Khởi tạo hồ sơ ứng viên (Lần đầu)',
+  request: { body: { content: { 'application/json': { schema: cand.CreateCandidateProfileSchema } } } },
+  responses: {
+    201: { description: 'Tạo hồ sơ thành công' },
+    400: { description: 'Hồ sơ đã tồn tại' },
+    401: { description: 'Chưa đăng nhập' }
+  },
+});
+// Xóa toàn bộ Profile (Bao gồm cả Exp, Edu, Project)
+export const deleteCandidateProfileDoc = createRoute({
+  method: 'delete',
+  path: '/me/delete-profile',
+  tags: [TAG_CANDIDATE],
+  summary: 'Xóa vĩnh viễn hồ sơ ứng viên và dữ liệu liên quan',
+  responses: {
+    200: { description: 'Xóa thành công' },
+    401: { description: 'Chưa đăng nhập' },
+    404: { description: 'Không tìm thấy hồ sơ' }
+  },
+});
+
+// --- WORK EXPERIENCE DOCS ---
+export const addWorkExperienceDoc = createRoute({
+  method: 'post',
+  path: '/experience/create',
+  tags: [TAG_CANDIDATE],
+  summary: 'Thêm kinh nghiệm làm việc',
+  request: { body: { content: { 'application/json': { schema: cand.WorkExperienceSchema } } } },
+  responses: {
+    201: { description: 'Thêm thành công' },
+    401: { description: 'Chưa đăng nhập' }
+  },
+});
+export const updateWorkExperienceDoc = createRoute({
+  method: 'put',
+  path: '/experience/{id}',
+  tags: [TAG_CANDIDATE],
+  summary: 'Sửa kinh nghiệm làm việc',
+  request: { 
+    params: cand.SubRecordIdParamSchema,
+    body: { content: { 'application/json': { schema: cand.UpdateWorkExperienceSchema } } } 
+  },
+  responses: { 200: { description: 'Cập nhật thành công' } },
+});
+export const deleteWorkExperienceDoc = createRoute({
+  method: 'delete',
+  path: '/experience/{id}',
+  tags: [TAG_CANDIDATE],
+  summary: 'Xóa kinh nghiệm làm việc',
+  request: { params: cand.SubRecordIdParamSchema },
+  responses: {
+    200: { description: 'Xóa thành công' },
+    404: { description: 'Không tìm thấy' }
+  },
+});
+
+// --- PERSONAL PROJECT DOCS ---
+export const addProjectDoc = createRoute({
+  method: 'post',
+  path: '/project/create',
+  tags: [TAG_CANDIDATE],
+  summary: 'Thêm dự án cá nhân',
+  request: { body: { content: { 'application/json': { schema: cand.PersonalProjectSchema } } } },
+  responses: {
+    201: { description: 'Thêm thành công' }
+  },
+});
+export const updateProjectDoc = createRoute({
+  method: 'put',
+  path: '/project/{id}',
+  tags: [TAG_CANDIDATE],
+  summary: 'Sửa dự án cá nhân',
+  request: { 
+    params: cand.SubRecordIdParamSchema,
+    body: { content: { 'application/json': { schema: cand.UpdatePersonalProjectSchema } } } 
+  },
+  responses: { 200: { description: 'Cập nhật thành công' } },
+});
+
+export const deleteProjectDoc = createRoute({
+  method: 'delete',
+  path: '/project/{id}',
+  tags: [TAG_CANDIDATE],
+  summary: 'Xóa dự án',
+  request: { params: cand.SubRecordIdParamSchema },
+  responses: {
+    200: { description: 'Xóa thành công' }
+  },
+});
+
+// --- EDUCATION DOCS ---
+export const addEducationDoc = createRoute({
+  method: 'post',
+  path: '/education/create',
+  tags: [TAG_CANDIDATE],
+  summary: 'Thêm học vấn',
+  request: { body: { content: { 'application/json': { schema: cand.EducationRecordSchema } } } },
+  responses: {
+    201: { description: 'Thêm thành công' }
+  },
+});
+export const updateEducationDoc = createRoute({
+  method: 'put',
+  path: '/education/{id}',
+  tags: [TAG_CANDIDATE],
+  summary: 'Sửa học vấn',
+  request: { 
+    params: cand.SubRecordIdParamSchema,
+    body: { content: { 'application/json': { schema: cand.UpdateEducationRecordSchema } } } 
+  },
+  responses: { 200: { description: 'Cập nhật thành công' } },
+});
+export const deleteEducationDoc = createRoute({
+  method: 'delete',
+  path: '/education/{id}',
+  tags: [TAG_CANDIDATE],
+  summary: 'Xóa học vấn',
+  request: { params: cand.SubRecordIdParamSchema },
+  responses: { 200: { description: 'Xóa thành công' } },
+});
+
+
+
 const TAG_JOBS = 'Jobs';
 
 export const createJobDoc = createRoute({
