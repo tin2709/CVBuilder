@@ -5,6 +5,8 @@ import { redis } from '@/lib/db';
 import { verifyRole } from '@/middlewares/auth.middleware';
 import * as doc from '@/schemas/api-doc';
 import { prisma } from '@/lib/db'; // Giả sử đường dẫn prisma của bạn
+ import * as crypto from 'crypto';
+
 // 1. Khởi tạo bằng OpenAPIHono
 const candidateRoute = new OpenAPIHono();
 
@@ -297,5 +299,140 @@ candidateRoute.openapi(doc.deleteCandidateProfileDoc, async (c) => {
   await redis.del(`candidate:${profile.id}`);
 
   return c.json({ success: true, message: "All profile data deleted" }, 200);
+});
+candidateRoute.openapi(doc.updateSharingSettingsDoc, async (c) => {
+  const userId = c.get('jwtPayload').id;
+  const { mode } = c.req.valid('json');
+
+  const profile = await prisma.candidateProfile.findUnique({ where: { userId } });
+  if (!profile) return c.json({ message: "Profile not found" }, 404);
+
+  let shareToken = profile.shareToken;
+  // Nếu chuyển sang Public mà chưa có token thì tạo mới
+  if (mode !== 'PRIVATE' && !shareToken) {
+    shareToken = crypto.randomBytes(16).toString('hex');
+  } 
+  // Nếu chuyển về Private thì có thể xóa token
+  else if (mode === 'PRIVATE') {
+    shareToken = null;
+  }
+
+  const updated = await prisma.candidateProfile.update({
+    where: { userId },
+    data: { 
+      sharingMode: mode as any, 
+      shareToken 
+    }
+  });
+
+  return c.json({
+    success: true,
+    sharingMode: updated.sharingMode,
+    shareLink: updated.shareToken ? `/shared/cv/${updated.shareToken}` : null
+  }, 200);
+});
+
+// API Thêm cộng tác viên (Mời Mentor/Bạn bè sửa giúp)
+candidateRoute.openapi(doc.addCollaboratorDoc, async (c) => {
+  const userId = c.get('jwtPayload').id; // Chủ sở hữu
+  const { email, role } = c.req.valid('json');
+
+  const profile = await prisma.candidateProfile.findUnique({ where: { userId } });
+  if (!profile) return c.json({ message: "Profile not found" }, 404);
+
+  // Tìm người được mời
+  const invitee = await prisma.user.findUnique({ where: { email } });
+  if (!invitee) return c.json({ message: "User with this email not found" }, 404);
+  if (invitee.id === userId) return c.json({ message: "You are the owner" }, 400);
+
+  // Lưu vào bảng Collaboration
+  await prisma.collaboration.upsert({
+    where: {
+      candidateProfileId_userId: {
+        candidateProfileId: profile.id,
+        userId: invitee.id
+      }
+    },
+    update: { role: role as any },
+    create: {
+      candidateProfileId: profile.id,
+      userId: invitee.id,
+      role: role as any
+    }
+  });
+
+  return c.json({ success: true, message: "Collaborator added/updated" }, 200);
+});
+
+// API Kiểm tra quyền (Cho Frontend Yjs Provider)
+candidateRoute.openapi(doc.checkProfileAccessDoc, async (c) => {
+  const { id } = c.req.valid('param'); // profileId
+  const { token } = c.req.valid('query'); // shareToken (nếu có)
+  const userId = c.get('jwtPayload')?.id;
+
+  const profile = await prisma.candidateProfile.findUnique({
+    where: { id },
+    include: { collaborators: true }
+  });
+
+  if (!profile) return c.json({ message: "Not found" }, 404);
+
+  let canView = false;
+  let canEdit = false;
+
+  // 1. Nếu là chủ sở hữu
+  if (userId && profile.userId === userId) {
+    canView = true;
+    canEdit = true;
+  } 
+  // 2. Nếu truy cập qua link public
+  else if (token && profile.shareToken === token) {
+    canView = true;
+    if (profile.sharingMode === 'PUBLIC_EDIT') canEdit = true;
+  }
+  // 3. Nếu được mời đích danh
+  else if (userId) {
+    const collab = profile.collaborators.find((col: any) => col.userId === userId);
+
+
+   if (collab) {
+      canView = true;
+      if (collab.role === 'EDITOR') canEdit = true;
+    }
+  }
+  // 4. Nếu profile ở chế độ Public View
+  else if (profile.sharingMode === 'PUBLIC_VIEW') {
+    canView = true;
+  }
+
+  return c.json({
+    canView,
+    canEdit,
+    mode: profile.sharingMode
+  }, 200);
+});
+candidateRoute.openapi(doc.getSharedProfilesDoc, async (c) => {
+  const userId = c.get('jwtPayload').id; // ID của người đang đăng nhập (Collaborator)
+
+  const sharedProfiles = await prisma.collaboration.findMany({
+    where: { userId: userId },
+    include: {
+      candidateProfile: {
+        include: {
+          user: { select: { name: true, email: true } } // Thông tin chủ sở hữu
+        }
+      }
+    }
+  });
+
+  return c.json({
+    success: true,
+    data: sharedProfiles.map(item => ({
+      profileId: item.candidateProfileId,
+      ownerName: item.candidateProfile.user.name,
+      role: item.role,
+      headline: item.candidateProfile.headline
+    }))
+  });
 });
 export default candidateRoute;

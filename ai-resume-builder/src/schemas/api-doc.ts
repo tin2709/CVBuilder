@@ -225,8 +225,53 @@ export const deleteEducationDoc = createRoute({
   request: { params: cand.SubRecordIdParamSchema },
   responses: { 200: { description: 'Xóa thành công' } },
 });
+export const updateSharingSettingsDoc = createRoute({
+  method: 'patch',
+  path: '/me/sharing',
+  tags: [TAG_CANDIDATE],
+  summary: 'Cập nhật chế độ chia sẻ hồ sơ (Public/Private)',
+  request: { body: { content: { 'application/json': { schema: cand.UpdateSharingSchema } } } },
+  responses: {
+    200: { content: { 'application/json': { schema: cand.CollaborationResponseSchema } }, description: 'Thành công' },
+    401: { description: 'Chưa đăng nhập' }
+  },
+});
 
+export const addCollaboratorDoc = createRoute({
+  method: 'post',
+  path: '/me/collaborators',
+  tags: [TAG_CANDIDATE],
+  summary: 'Mời người khác cộng tác sửa/xem qua email',
+  request: { body: { content: { 'application/json': { schema: cand.AddCollaboratorSchema } } } },
+  responses: {
+    200: { description: 'Đã thêm cộng tác viên' },
+    404: { description: 'Không tìm thấy người dùng với email này' }
+  },
+});
 
+export const checkProfileAccessDoc = createRoute({
+  method: 'get',
+  path: '/profile/{id}/access',
+  tags: [TAG_CANDIDATE],
+  summary: 'Kiểm tra quyền truy cập của user hiện tại vào một profile',
+  request: { 
+    params: z.object({ id: z.string() }),
+    query: z.object({ token: z.string().optional() }) 
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: cand.AccessCheckResponseSchema } }, description: 'Quyền hạn' },
+    404: { description: 'Không thấy hồ sơ' }
+  },
+});
+export const getSharedProfilesDoc = createRoute({
+  method: 'get',
+  path: '/shared-with-me',
+  tags: ['Candidates'],
+  summary: 'Lấy danh sách các hồ sơ mà tôi được mời cộng tác',
+  responses: {
+    200: { description: 'Thành công' }
+  }
+});
 
 const TAG_JOBS = 'Jobs';
 

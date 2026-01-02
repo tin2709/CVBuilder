@@ -39,7 +39,14 @@ model CandidateProfile {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   userId      String   @unique @db.ObjectId // Nên là unique
   user        User     @relation(fields: [userId], references: [id])
+    yDoc        Bytes?   
   
+  // Quản lý quyền truy cập
+  sharingMode SharingMode @default(PRIVATE)
+  shareToken  String?     @unique // Token ngẫu nhiên cho link chia sẻ (vd: docs.com/cv/abc-123)
+
+  // Danh sách những người được mời đích danh để cộng tác
+  collaborators Collaboration[]
   headline    String?  // VD: Intern Fullstack Developer
   summary     String?  // Phần "Profile" trong CV của bạn
   phone       String?
@@ -102,6 +109,18 @@ model EducationRecord {
   startDate        DateTime?
   endDate          DateTime?
   gpa              String?
+}
+model Collaboration {
+  id                 String           @id @default(auto()) @map("_id") @db.ObjectId
+  candidateProfileId String           @db.ObjectId
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id])
+  
+  userId             String           @db.ObjectId // ID người được mời
+  role               CollaboratorRole @default(VIEWER)
+  
+  createdAt          DateTime         @default(now())
+
+  @@unique([candidateProfileId, userId])
 }
 // 3. Tin tuyển dụng
 model Job {
@@ -249,7 +268,16 @@ model Notification {
   
   createdAt DateTime @default(now())
 }
-
+enum SharingMode {
+  PRIVATE      // Chỉ chủ sở hữu
+  PUBLIC_VIEW  // Bất kỳ ai có link đều xem được
+  PUBLIC_EDIT  // Bất kỳ ai có link đều sửa được
+  SPECIFIC     // Chỉ những người được chỉ định (dùng bảng trung gian)
+}
+enum CollaboratorRole {
+  VIEWER
+  EDITOR
+}
 enum NotificationType {
   APPLICATION_STATUS
   NEW_INTERVIEW

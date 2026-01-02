@@ -100,3 +100,37 @@ export const CandidateProfileResponseSchema = z.object({
   message: z.string().optional(),
   data: z.any().optional()
 }).openapi('CandidateProfileResponse');
+
+// src/schemas/candidate.schema.ts (Thêm vào file này)
+
+export const SharingModeEnum = z.enum(['PRIVATE', 'PUBLIC_VIEW', 'PUBLIC_EDIT']);
+export const CollaboratorRoleEnum = z.enum(['VIEWER', 'EDITOR']);
+
+export const UpdateSharingSchema = z.object({
+  mode: SharingModeEnum
+}).openapi('UpdateSharing');
+
+export const AddCollaboratorSchema = z.object({
+  email: z.string().email("Email không hợp lệ"),
+  role: CollaboratorRoleEnum
+}).openapi('AddCollaborator');
+
+export const CollaborationResponseSchema = z.object({
+  success: z.boolean(),
+  sharingMode: SharingModeEnum.optional(),
+  shareLink: z.string().nullable().optional(),
+  collaborators: z.array(z.object({
+    id: z.string(),
+    user: z.object({
+      name: z.string().nullable(),
+      email: z.string()
+    }),
+    role: CollaboratorRoleEnum
+  })).optional()
+}).openapi('CollaborationResponse');
+
+export const AccessCheckResponseSchema = z.object({
+  canView: z.boolean(),
+  canEdit: z.boolean(),
+  mode: SharingModeEnum
+}).openapi('AccessCheckResponse');
