@@ -46,9 +46,9 @@ export const PersonalProjectSchema = z.object({
 export const EducationRecordSchema = z.object({
   schoolName: z.string().min(1, "Tên trường không được để trống"),
   major: z.string().min(1, "Ngành học không được để trống"),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  gpa: z.string().optional(),
+   startDate: z.string().optional().nullable(), // Thêm .nullable()
+  endDate: z.string().optional().nullable(),   // Thêm .nullable()
+  gpa: z.string().optional().nullable(),      
 }).openapi('EducationRecord');
 
 // ==========================================
@@ -57,10 +57,10 @@ export const EducationRecordSchema = z.object({
 
 // --- Create Profile (Dùng khi khởi tạo) ---
 export const CreateCandidateProfileSchema = z.object({
-  headline: z.string().min(3, "Headline ít nhất 3 ký tự"),
-  summary: z.string().optional(),
-  phone: z.string().optional(),
-  address: z.string().optional(),
+   headline: z.string().min(3, "Headline ít nhất 3 ký tự"),
+  summary: z.string().optional().nullable(), // Thêm .nullable()
+  phone: z.string().optional().nullable(),   // Thêm .nullable()
+  address: z.string().optional().nullable(), // Thêm .nullable()
   skills: z.array(z.string()).default([]),
   softSkills: z.array(z.string()).default([]),
 }).openapi('CreateCandidateProfile');
@@ -134,3 +134,62 @@ export const AccessCheckResponseSchema = z.object({
   canEdit: z.boolean(),
   mode: SharingModeEnum
 }).openapi('AccessCheckResponse');
+// ==========================================
+// 6. FULL PROFILE RESPONSE SCHEMA
+// ==========================================
+
+// Schema phụ để hiển thị thông tin User cơ bản đi kèm Profile
+export const UserInfoSchema = z.object({
+  name: z.string().nullable(),
+  email: z.string(),
+  role: z.string(),
+}).openapi('UserInfo');
+
+// Schema cho phần Languages (dựa trên Prisma Json: [{lang: string, level: string}])
+export const LanguageSchema = z.object({
+  lang: z.string(),
+  level: z.string()
+});
+
+export const CandidateProfileFullSchema = z.object({
+  id: z.string().openapi({ example: '65f1...' }),
+  userId: z.string(),
+  user: UserInfoSchema, // Thông tin từ bảng User (tên, email)
+  
+  headline: z.string().nullable(),
+  summary: z.string().nullable(),
+  phone: z.string().nullable(),
+  address: z.string().nullable(),
+  
+  githubUrl: z.string().nullable(),
+  linkedinUrl: z.string().nullable(),
+  portfolioUrl: z.string().nullable(),
+  
+  skills: z.array(z.string()),
+  softSkills: z.array(z.string()),
+  languages: z.array(LanguageSchema).nullable().optional(),
+  
+  sharingMode: SharingModeEnum,
+  shareToken: z.string().nullable(),
+  
+  // Danh sách các bản ghi con (có kèm ID để Frontend dễ quản lý)
+  workExperiences: z.array(
+    WorkExperienceSchema.extend({ id: z.string() })
+  ),
+  projects: z.array(
+    PersonalProjectSchema.extend({ id: z.string() })
+  ),
+  educations: z.array(
+    EducationRecordSchema.extend({ id: z.string() })
+  ),
+  
+  cvUrl: z.string().nullable(),
+  createdAt: z.string().datetime().optional(),
+  updatedAt: z.string().datetime().optional(),
+}).openapi('CandidateProfileFull');
+
+// Schema bọc ngoài để trả về API (Success Wrapper)
+export const CandidateProfileFullResponseSchema = z.object({
+  success: z.boolean(),
+  data: CandidateProfileFullSchema
+}).openapi('CandidateProfileFullResponse');

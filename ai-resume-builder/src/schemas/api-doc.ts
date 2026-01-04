@@ -125,7 +125,24 @@ export const deleteCandidateProfileDoc = createRoute({
     404: { description: 'Không tìm thấy hồ sơ' }
   },
 });
-
+export const getMyProfileDoc = createRoute({
+  method: 'get',
+  path: '/me',
+  tags: [TAG_CANDIDATE],
+  summary: 'Lấy chi tiết hồ sơ của tôi (Dùng để hiển thị trang Profile)',
+  responses: {
+    200: { 
+      content: { 
+        'application/json': { 
+          schema: cand.CandidateProfileFullSchema // Schema này nên chứa cả include: Exp, Edu, Project
+        } 
+      }, 
+      description: 'Thành công' 
+    },
+    401: { description: 'Chưa đăng nhập' },
+    404: { description: 'Người dùng chưa khởi tạo hồ sơ' }
+  },
+});
 // --- WORK EXPERIENCE DOCS ---
 export const addWorkExperienceDoc = createRoute({
   method: 'post',
