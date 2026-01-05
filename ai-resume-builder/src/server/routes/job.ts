@@ -1,5 +1,9 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
-import { createJobDoc,updateJobDoc, deleteJobDoc,deleteManyJobsDoc,getMyJobsDoc,toggleSaveJobDoc } from '@/schemas/api-doc';
+import { createJobDoc,updateJobDoc, deleteJobDoc,deleteManyJobsDoc,getMyJobsDoc,toggleSaveJobDoc,
+  getJobsDoc, 
+  getJobByIdDoc, 
+  getSavedJobsDoc 
+ } from '@/schemas/api-doc';
 import { prisma } from '@/lib/db';
 import { verifyRole } from '@/middlewares/auth.middleware';
 
@@ -238,4 +242,133 @@ jobRoute.openapi(toggleSaveJobDoc, async (c) => {
     isSaved: !isSaved
   }, 200);
 });
+jobRoute.openapi(getJobsDoc, async (c) => {
+  const query = c.req.valid('query');
+  const payload = c.get('jwtPayload'); // Có thể null nếu không qua middleware
+  
+  const page = parseInt(query.page || '1');
+  const limit = parseInt(query.limit || '10');
+  const skip = (page - 1) * limit;
+
+  // Xây dựng bộ lọc
+  const where: any = {
+    status: 'OPEN',
+    ...(query.search && {
+      OR: [
+        { title: { contains: query.search, mode: 'insensitive' } },
+        { companyName: { contains: query.search, mode: 'insensitive' } },
+      ],
+    }),
+    ...(query.location && { location: { contains: query.location, mode: 'insensitive' } }),
+    ...(query.categoryId && { categoryId: query.categoryId }),
+  };
+
+  try {
+    const [total, jobs] = await Promise.all([
+      prisma.job.count({ where }),
+      prisma.job.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          company: { select: { id: true, name: true, logoUrl: true } },
+          category: { select: { id: true, name: true, icon: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    // Xử lý logic kiểm tra user đã save hay apply chưa
+    const candidateId = payload?.id;
+    const formattedData = jobs.map((job) => ({
+      ...job,
+      createdAt: job.createdAt.toISOString(),
+      deadline: job.deadline?.toISOString() || null,
+      isSaved: candidateId ? job.savedByUserIds.includes(candidateId) : false,
+      // Logic isApplied có thể check trong bảng Application nếu cần
+    }));
+
+    return c.json({
+      success: true,
+      count: jobs.length,
+      total,
+      data: formattedData,
+    }, 200);
+  } catch (error: any) {
+    return c.json({ success: false, message: error.message }, 400);
+  }
+});
+
+// --- 2. API: Xem chi tiết công việc ---
+jobRoute.use('/:id', verifyRole('CANDIDATE'));
+jobRoute.openapi(getJobByIdDoc, async (c) => {
+  const { id } = c.req.valid('param');
+  const payload = c.get('jwtPayload');
+
+  try {
+    const job = await prisma.job.findUnique({
+      where: { id },
+      include: {
+        company: true,
+        category: true,
+        applications: payload ? { where: { candidate: { userId: payload.id } } } : false
+      }
+    });
+
+    if (!job) return c.json({ success: false, message: "Không tìm thấy công việc" }, 404);
+
+    const application = job.applications?.[0];
+
+    const result = {
+      ...job,
+      createdAt: job.createdAt.toISOString(),
+      updatedAt: job.updatedAt.toISOString(),
+      startDate: job.startDate?.toISOString() || null,
+      deadline: job.deadline?.toISOString() || null,
+      isSaved: payload ? job.savedByUserIds.includes(payload.id) : false,
+      applicationStatus: application ? application.status : null,
+    };
+
+    return c.json({ success: true, data: result }, 200);
+  } catch (error: any) {
+    return c.json({ success: false, message: error.message }, 400);
+  }
+});
+
+// --- 3. API: Lấy danh sách công việc đã lưu ---
+jobRoute.use('/me/saved', verifyRole('CANDIDATE'));
+jobRoute.openapi(getSavedJobsDoc, async (c) => {
+  const payload = c.get('jwtPayload');
+  
+  try {
+    const userWithSavedJobs = await prisma.user.findUnique({
+      where: { id: payload.id },
+      include: {
+        savedJobs: {
+          include: {
+            company: { select: { id: true, name: true, logoUrl: true } },
+            category: { select: { id: true, name: true, icon: true } },
+          }
+        }
+      }
+    });
+
+    const jobs = userWithSavedJobs?.savedJobs || [];
+
+    return c.json({
+      success: true,
+      count: jobs.length,
+      total: jobs.length,
+      data: jobs.map(job => ({
+        ...job,
+        createdAt: job.createdAt.toISOString(),
+        deadline: job.deadline?.toISOString() || null,
+        isSaved: true // Chắc chắn là true vì đang lấy trong list đã lưu
+      }))
+    }, 200);
+  } catch (error: any) {
+    return c.json({ success: false, message: error.message }, 400);
+  }
+});
+
 export default jobRoute;

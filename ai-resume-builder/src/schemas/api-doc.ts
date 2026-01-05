@@ -390,6 +390,49 @@ export const getMyJobsDoc = createRoute({
     },
   },
 });
+export const getJobsDoc = createRoute({
+  method: 'get',
+  path: '/all', // Hoặc /search-jobs
+  tags: [TAG_JOBS],
+  summary: 'Ứng viên tìm kiếm và lấy danh sách bài đăng tuyển dụng',
+  request: { 
+    query: job.JobSearchQuerySchema // Schema này nên chứa: search, categoryId, location, salaryRange, page, limit
+  },
+  responses: {
+    200: { 
+      content: { 'application/json': { schema: job.JobListResponseSchema } }, 
+      description: 'Thành công' 
+    },
+    400: { description: 'Lỗi tham số truy vấn' }
+  },
+});
+export const getJobByIdDoc = createRoute({
+  method: 'get',
+  path: '/{id}',
+  tags: [TAG_JOBS],
+  summary: 'Lấy chi tiết một công việc theo ID',
+  request: { params: job.JobIdParamSchema },
+  responses: {
+    200: { 
+      content: { 'application/json': { schema: job.JobDetailResponseSchema } }, 
+      description: 'Thành công' 
+    },
+    404: { description: 'Không tìm thấy công việc' }
+  },
+});
+export const getSavedJobsDoc = createRoute({
+  method: 'get',
+  path: '/me/saved',
+  tags: [TAG_JOBS],
+  summary: 'Lấy danh sách các công việc mà ứng viên đã lưu',
+  responses: {
+    200: { 
+      content: { 'application/json': { schema: job.JobListResponseSchema } }, 
+      description: 'Thành công' 
+    },
+    401: { description: 'Chưa đăng nhập' }
+  },
+});
 // Thêm vào file src/schemas/api-doc.ts
 export const toggleSaveJobDoc = createRoute({
   method: 'post',
