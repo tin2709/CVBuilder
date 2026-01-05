@@ -52,5 +52,51 @@ export const jobClientService = {
       headers: { Authorization: `Bearer ${token}` }
     });
     return await res.json();
+  },
+   async getAllJobs(params: { search?: string; location?: string; page?: number; limit?: number }) {
+    const token = localStorage.getItem("accessToken");
+    const res = await client.api.jobs.all.$get({
+      query: {
+        search: params.search,
+        location: params.location,
+        page: params.page?.toString(),
+        limit: params.limit?.toString(),
+      }
+    }, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {} // Gửi token nếu có để check isSaved
+    });
+    if (!res.ok) throw new Error("Không thể tải danh sách công việc");
+    return await res.json();
+  },
+
+  // 2. Xem chi tiết 1 job
+  async getJobDetail(id: string) {
+    const token = localStorage.getItem("accessToken");
+    const res = await client.api.jobs[":id"].$get({
+      param: { id }
+    }, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    if (!res.ok) throw new Error("Không tìm thấy thông tin công việc");
+    return await res.json();
+  },
+
+  // 3. Lưu/Bỏ lưu job
+  async toggleSaveJob(id: string) {
+    const token = localStorage.getItem("accessToken");
+    const res = await client.api.jobs[":id"].save.$post({
+      param: { id }
+    }, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return await res.json();
+  },
+   async getSavedJobs() {
+    const token = localStorage.getItem("accessToken");
+    const res = await client.api.jobs.me.saved.$get({}, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error("Không thể tải danh sách đã lưu");
+    return await res.json();
   }
 };

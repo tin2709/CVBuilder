@@ -63,3 +63,38 @@ export const useDeleteJob = () => {
     }
   });
 };
+// Hook lấy danh sách job cho Candidate
+export const useAllJobs = (params: { search?: string; location?: string; page?: number; limit?: number }) => {
+  return useQuery({
+    queryKey: ["all-jobs", params], // Key bao gồm params để tự động refetch khi search thay đổi
+    queryFn: () => jobClientService.getAllJobs(params),
+  });
+};
+
+// Hook lấy chi tiết job
+export const useJobDetail = (id: string | null) => {
+  return useQuery({
+    queryKey: ["job-detail", id],
+    queryFn: () => jobClientService.getJobDetail(id!),
+    enabled: !!id, // Chỉ chạy khi có ID
+  });
+};
+export const useSavedJobs = () => {
+  return useQuery({
+    queryKey: ["saved-jobs"],
+    queryFn: () => jobClientService.getSavedJobs(),
+  });
+};
+// Hook lưu job
+export const useToggleSave = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => jobClientService.toggleSaveJob(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["all-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["saved-jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["job-detail"] });
+
+    }
+  })
+};

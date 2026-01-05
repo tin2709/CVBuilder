@@ -1,63 +1,89 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import Link from "next/link";
-import { 
-  Bot, Search, Bell, MessageSquare, MapPin, 
-  Briefcase, DollarSign, Sparkles, Settings, 
-  Eye, TrendingUp, ArrowRight, Clock 
+import {
+  useAllJobs,
+  useJobDetail,
+  useToggleSave,
+  useSavedJobs
+} from "@/hooks/use-job-data";
+import { useMyProfile } from "@/hooks/use-candidate-data";
+import { useApplyJob, useMyApplications } from "@/hooks/use-application-data";
+import {
+  Bot, Search, Bell, MapPin, Briefcase, DollarSign, Sparkles, 
+  ArrowRight, Clock, Loader2, Heart, CheckCircle2, Settings
 } from "lucide-react";
+
+// UI Components
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function CandidateDashboard() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+
+  // 1. Fetch dữ liệu từ Hooks
+  const { data: profileRes } = useMyProfile();
+  const { data: jobsRes, isLoading } = useAllJobs({ search: searchQuery, limit: 10 });
+  const { data: detailRes, isFetching: isDetailLoading } = useJobDetail(selectedJobId);
+  const { data: savedJobsRes } = useSavedJobs();
+  const { data: appsRes } = useMyApplications();
+
+  // Actions
+  const saveMutation = useToggleSave();
+  const applyMutation = useApplyJob();
+
+  // Dữ liệu xử lý
+  const profile = profileRes?.data;
+  const currentUserId = profile?.userId; // Lấy ID của User hiện tại để check tim
+  const jobs = jobsRes?.data || [];
+  const savedCount = savedJobsRes?.count || 0;
+
+  // Set chứa danh sách JobId đã ứng tuyển để kiểm tra nhanh O(1)
+  const appliedJobIds = useMemo(() => {
+    return new Set(appsRes?.data?.map((app: any) => app.jobId) || []);
+  }, [appsRes]);
+
   return (
     <div className="min-h-screen bg-[#F3F4F6]">
       {/* --- 1. HEADER --- */}
       <header className="bg-white border-b sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          {/* Logo + Search */}
           <div className="flex items-center gap-8 flex-1">
             <Link href="/" className="flex items-center gap-2 font-bold text-xl text-slate-800">
-              <div className="bg-blue-600 p-1.5 rounded-lg text-white">
-                <Bot className="w-5 h-5" />
-              </div>
+              <div className="bg-blue-600 p-1.5 rounded-lg text-white"><Bot className="w-5 h-5" /></div>
               SmartJob AI
             </Link>
-            
             <div className="relative max-w-md w-full hidden md:block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <Input 
-                placeholder="Tìm kiếm việc làm, công ty..." 
-                className="pl-9 bg-slate-100 border-none focus-visible:ring-1 focus-visible:ring-blue-500" 
+              <Input
+                placeholder="Tìm kiếm việc làm..."
+                className="pl-9 bg-slate-100 border-none"
+                onKeyDown={(e) => e.key === "Enter" && setSearchQuery(e.currentTarget.value)}
               />
             </div>
           </div>
 
-          {/* Navigation & User */}
           <div className="flex items-center gap-6">
-            <nav className="hidden md:flex gap-6 text-sm font-medium text-slate-600">
-              <Link href="#" className="hover:text-blue-600 text-blue-600">Việc làm</Link>
-              <Link href="#" className="hover:text-blue-600">Công ty</Link>
-              <Link href="#" className="hover:text-blue-600">Hồ sơ</Link>
-            </nav>
-            
             <div className="flex items-center gap-3 border-l pl-6">
-              <Button variant="ghost" size="icon" className="text-slate-500 relative">
-                <Bell className="w-5 h-5" />
-                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-              </Button>
-              <Button variant="ghost" size="icon" className="text-slate-500">
-                <MessageSquare className="w-5 h-5" />
-              </Button>
+              <Link href="/candidate/saved-jobs" className="relative p-2 hover:bg-slate-100 rounded-full transition-colors">
+                <Heart className={`w-6 h-6 ${savedCount > 0 ? "fill-pink-500 text-pink-500" : "text-slate-500"}`} />
+                {savedCount > 0 && (
+                  <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-white">
+                    {savedCount}
+                  </span>
+                )}
+              </Link>
               <Avatar className="w-8 h-8 cursor-pointer">
-                <AvatarImage src="https://github.com/shadcn.png" />
-                <AvatarFallback>MN</AvatarFallback>
+                <AvatarImage src={profile?.user?.image} />
+                <AvatarFallback>{profile?.user?.name?.[0] || "U"}</AvatarFallback>
               </Avatar>
             </div>
           </div>
@@ -68,244 +94,174 @@ export default function CandidateDashboard() {
       <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="grid grid-cols-12 gap-8">
           
-          {/* === LEFT COLUMN (8 cols) === */}
+          {/* LEFT: JOB LIST */}
           <div className="col-span-12 lg:col-span-8 space-y-8">
-            
-            {/* Greeting Section */}
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-                Chào mừng trở lại, Minh! <span className="text-2xl animate-wave">👋</span>
-              </h1>
-              <p className="text-slate-500 mt-1">Bạn đã sẵn sàng cho cơ hội nghề nghiệp tiếp theo chưa?</p>
+              <h1 className="text-2xl font-bold text-slate-900">Chào mừng trở lại, {profile?.user?.name || "bạn"}! 👋</h1>
+              <p className="text-slate-500">Hôm nay có {jobsRes?.total || 0} công việc mới dành cho bạn.</p>
             </div>
 
-            {/* AI Recommended Jobs */}
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-blue-600 fill-blue-600" />
-                  Việc làm phù hợp nhất (AI Recommended)
-                </h2>
-                <Link href="#" className="text-sm text-blue-600 hover:underline flex items-center">
-                  Xem tất cả <ArrowRight className="w-4 h-4 ml-1" />
-                </Link>
-              </div>
+            <section className="space-y-4">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-blue-600 fill-blue-600" /> Việc làm đề xuất
+              </h2>
 
-              <div className="grid md:grid-cols-2 gap-4">
-                {/* Job Card 1 */}
-                <Card className="hover:shadow-md transition-shadow border-slate-200">
-                  <CardContent className="p-5 space-y-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex gap-3">
-                        <div className="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600 font-bold text-xs">VNG</div>
-                        <div>
-                          <h3 className="font-bold text-slate-900">Senior UX Designer</h3>
-                          <p className="text-sm text-slate-500">VNG Corporation</p>
-                        </div>
-                      </div>
-                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 gap-1">
-                        <div className="w-1.5 h-1.5 rounded-full bg-green-600"></div>
-                        98% Match
-                      </Badge>
-                    </div>
+              {isLoading ? (
+                <div className="flex justify-center py-20"><Loader2 className="animate-spin text-slate-300 w-10 h-10" /></div>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-4">
+                  {jobs.map((job: any) => {
+                    const isSaved = job.savedByUserIds?.includes(currentUserId);
+                    const isApplied = appliedJobIds.has(job.id);
 
-                    <div className="flex flex-wrap gap-2 text-xs text-slate-600">
-                      <Badge variant="secondary" className="font-normal"><MapPin className="w-3 h-3 mr-1"/> TP. Hồ Chí Minh</Badge>
-                      <Badge variant="secondary" className="font-normal"><Briefcase className="w-3 h-3 mr-1"/> Full-time</Badge>
-                      <Badge variant="secondary" className="font-normal text-blue-600 bg-blue-50"><DollarSign className="w-3 h-3 mr-1"/> $2000 - $3500</Badge>
-                    </div>
-
-                    <Separator />
-                    
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-xs text-slate-400">Đăng 2 ngày trước</span>
-                      <Button size="sm" className="bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200 shadow-none font-semibold">
-                        Ứng tuyển
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Job Card 2 */}
-                <Card className="hover:shadow-md transition-shadow border-slate-200">
-                  <CardContent className="p-5 space-y-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex gap-3">
-                        <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center text-green-700 font-bold text-xs">FPT</div>
-                        <div>
-                          <h3 className="font-bold text-slate-900">Frontend Lead</h3>
-                          <p className="text-sm text-slate-500">FPT Software</p>
-                        </div>
-                      </div>
-                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 gap-1">
-                         <div className="w-1.5 h-1.5 rounded-full bg-blue-600"></div>
-                        92% Match
-                      </Badge>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 text-xs text-slate-600">
-                      <Badge variant="secondary" className="font-normal"><MapPin className="w-3 h-3 mr-1"/> Hà Nội</Badge>
-                      <Badge variant="secondary" className="font-normal"><Briefcase className="w-3 h-3 mr-1"/> Hybrid</Badge>
-                      <Badge variant="secondary" className="font-normal text-blue-600 bg-blue-50"><DollarSign className="w-3 h-3 mr-1"/> Thỏa thuận</Badge>
-                    </div>
-
-                    <Separator />
-                    
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-xs text-slate-400">Đăng 5 giờ trước</span>
-                      <Button size="sm" className="bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200 shadow-none font-semibold">
-                        Ứng tuyển
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </section>
-
-            {/* Application Status */}
-            <section>
-               <h2 className="text-lg font-bold text-slate-800 mb-4">Trạng thái ứng tuyển</h2>
-               <Card className="border-slate-200 shadow-sm overflow-hidden">
-                 <Table>
-                   <TableHeader className="bg-slate-50">
-                     <TableRow>
-                       <TableHead>Vị trí</TableHead>
-                       <TableHead>Công ty</TableHead>
-                       <TableHead>Ngày nộp</TableHead>
-                       <TableHead>Trạng thái</TableHead>
-                     </TableRow>
-                   </TableHeader>
-                   <TableBody>
-                     {[
-                       { role: "Product Manager", company: "Shopee", date: "12/10/2023", status: "Phỏng vấn", color: "bg-purple-100 text-purple-700" },
-                       { role: "Senior React Dev", company: "MoMo", date: "10/10/2023", status: "Đang xem xét", color: "bg-blue-100 text-blue-700" },
-                       { role: "System Architect", company: "Tiki", date: "05/10/2023", status: "Đã đóng", color: "bg-slate-100 text-slate-600" },
-                     ].map((job, idx) => (
-                       <TableRow key={idx}>
-                         <TableCell className="font-medium">{job.role}</TableCell>
-                         <TableCell>
-                           <div className="flex items-center gap-2">
-                              {/* Logo giả lập */}
-                              <div className="w-6 h-6 rounded bg-gray-200 flex items-center justify-center text-[10px] font-bold text-gray-500">
-                                {job.company[0]}
+                    return (
+                      <Card 
+                        key={job.id} 
+                        className="hover:shadow-md transition-all cursor-pointer border-slate-200 group/card"
+                        onClick={() => setSelectedJobId(job.id)}
+                      >
+                        <CardContent className="p-5 space-y-4">
+                          <div className="flex justify-between items-start">
+                            <div className="flex gap-3">
+                              <div className="w-12 h-12 rounded-lg bg-blue-50 flex items-center justify-center text-blue-700 font-bold text-lg">
+                                {job.company?.name?.[0]}
                               </div>
-                              {job.company}
-                           </div>
-                         </TableCell>
-                         <TableCell className="text-slate-500">{job.date}</TableCell>
-                         <TableCell>
-                           <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${job.color}`}>
-                              • {job.status}
-                           </span>
-                         </TableCell>
-                       </TableRow>
-                     ))}
-                   </TableBody>
-                 </Table>
-                 <div className="p-3 text-center border-t bg-slate-50/50">
-                    <Button variant="link" className="text-blue-600 h-auto py-0">Xem tất cả lịch sử</Button>
-                 </div>
-               </Card>
-            </section>
+                              <div>
+                                <h3 className="font-bold text-slate-900 line-clamp-1 group-hover/card:text-blue-600 transition-colors">{job.title}</h3>
+                                <p className="text-sm text-slate-500">{job.company?.name}</p>
+                              </div>
+                            </div>
+                            <Button 
+                              variant="ghost" size="icon" className={`h-9 w-9 rounded-full ${isSaved ? "bg-pink-50" : ""}`}
+                              onClick={(e) => { e.stopPropagation(); saveMutation.mutate(job.id); }}
+                            >
+                              <Heart className={`w-5 h-5 transition-all ${isSaved ? "fill-pink-500 text-pink-500 scale-110" : "text-slate-300"}`} />
+                            </Button>
+                          </div>
 
+                          <div className="flex items-center justify-between">
+                            <div className="flex gap-2">
+                              <Badge variant="secondary" className="font-normal text-blue-600 bg-blue-50">
+                                <DollarSign className="w-3 h-3 mr-1"/> {job.salaryRange || "Thỏa thuận"}
+                              </Badge>
+                            </div>
+                            {isApplied && (
+                              <Badge className="bg-emerald-50 text-emerald-600 border-emerald-200 font-bold">
+                                <CheckCircle2 className="w-3 h-3 mr-1" /> Đã nộp
+                              </Badge>
+                            )}
+                          </div>
+
+                          <Separator />
+                          <div className="flex items-center justify-between text-[10px] text-slate-400">
+                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Hạn: {new Date(job.deadline).toLocaleDateString('vi-VN')}</span>
+                            <span className="text-blue-600 font-bold flex items-center gap-1">Chi tiết <ArrowRight className="w-3 h-3"/></span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           </div>
 
-          {/* === RIGHT COLUMN (4 cols) === */}
+          {/* RIGHT: PROFILE STATS */}
           <div className="col-span-12 lg:col-span-4 space-y-6">
-            
-            {/* 1. Profile Card */}
-            <Card className="border-slate-200 shadow-sm">
-              <div className="h-24 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-xl"></div>
+            <Card className="border-slate-200">
+              <div className="h-20 bg-blue-600 rounded-t-xl" />
               <CardContent className="px-6 pb-6 relative">
-                 <div className="absolute -top-12 left-1/2 -translate-x-1/2">
-                    <Avatar className="w-24 h-24 border-4 border-white shadow-md">
-                      <AvatarImage src="https://github.com/shadcn.png" />
-                      <AvatarFallback>MN</AvatarFallback>
-                    </Avatar>
-                 </div>
-                 
-                 <div className="mt-14 text-center space-y-1">
-                   <h3 className="font-bold text-xl text-slate-900">Minh Nguyễn</h3>
-                   <p className="text-sm text-blue-600 font-medium">Senior Product Designer</p>
-                 </div>
-
-                 <div className="flex gap-2 mt-6">
-                    <Button className="flex-1 bg-blue-600 hover:bg-blue-700 shadow-blue-200 shadow-lg">Cập nhật hồ sơ</Button>
-                    <Button variant="outline" size="icon" className="border-slate-200"><Settings className="w-4 h-4 text-slate-600"/></Button>
-                 </div>
-
-                 <div className="mt-6 space-y-2">
-                    <div className="flex justify-between text-sm font-medium">
-                       <span className="text-slate-700">Hoàn thiện hồ sơ</span>
-                       <span className="text-blue-600">85%</span>
-                    </div>
-                    <Progress value={85} className="h-2 bg-slate-100" />
-                    <p className="text-xs text-orange-500 flex items-center gap-1 mt-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span> 
-                      Thêm kỹ năng để đạt 100%
-                    </p>
-                 </div>
+                <Avatar className="w-20 h-20 border-4 border-white absolute -top-10 left-6">
+                  <AvatarImage src={profile?.user?.image} />
+                  <AvatarFallback>{profile?.user?.name?.[0]}</AvatarFallback>
+                </Avatar>
+                <div className="mt-12 space-y-1">
+                  <h3 className="font-bold text-xl">{profile?.user?.name}</h3>
+                  <p className="text-sm text-blue-600 font-medium">{profile?.headline || "Cập nhật Headline"}</p>
+                </div>
+                <div className="mt-6 space-y-2 text-sm font-medium">
+                  <div className="flex justify-between"><span>Hoàn thiện hồ sơ</span><span className="text-blue-600">85%</span></div>
+                  <Progress value={85} className="h-2" />
+                </div>
+                <Button asChild className="w-full mt-6 bg-blue-600"><Link href="/candidate/profile">Chỉnh sửa hồ sơ</Link></Button>
               </CardContent>
             </Card>
-
-            {/* 2. Stats Card */}
-            <Card className="border-slate-200 shadow-sm">
-                <CardHeader className="pb-2">
-                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Thống kê tuần này</h4>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                   {/* Item 1 */}
-                   <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-                            <Eye className="w-4 h-4" />
-                         </div>
-                         <div>
-                            <p className="text-xs text-slate-500">Lượt xem hồ sơ</p>
-                            <p className="font-bold text-slate-900">128</p>
-                         </div>
-                      </div>
-                      <Badge variant="secondary" className="bg-green-100 text-green-700 hover:bg-green-100">
-                         <TrendingUp className="w-3 h-3 mr-1" /> 12%
-                      </Badge>
-                   </div>
-                   
-                   {/* Item 2 */}
-                   <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                      <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600">
-                            <Search className="w-4 h-4" />
-                         </div>
-                         <div>
-                            <p className="text-xs text-slate-500">Xuất hiện tìm kiếm</p>
-                            <p className="font-bold text-slate-900">45</p>
-                         </div>
-                      </div>
-                      <span className="text-xs text-slate-400 font-medium">0%</span>
-                   </div>
-                </CardContent>
-            </Card>
-
-            {/* 3. CTA Card */}
-            <div className="rounded-xl bg-[#2563EB] p-6 text-white relative overflow-hidden shadow-lg shadow-blue-500/30">
-                {/* Background Pattern */}
-                <div className="absolute top-0 right-0 -mr-8 -mt-8 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-                <div className="absolute bottom-0 left-0 -ml-8 -mb-8 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-                
-                <div className="relative z-10">
-                   <h3 className="font-bold text-lg mb-2">Nâng cấp CV với AI</h3>
-                   <p className="text-blue-100 text-sm mb-6 leading-relaxed">
-                      Sử dụng công cụ AI của chúng tôi để tối ưu hóa CV và tăng cơ hội trúng tuyển.
-                   </p>
-                   <Button variant="secondary" className="bg-white text-blue-600 hover:bg-blue-50 w-fit font-bold">
-                      Thử ngay
-                   </Button>
-                </div>
-            </div>
-
           </div>
         </div>
       </main>
+
+      {/* --- 3. MODAL DETAIL --- */}
+      <Dialog open={!!selectedJobId} onOpenChange={() => setSelectedJobId(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0 border-none">
+          {isDetailLoading ? (
+            <div className="p-20 flex flex-col items-center"><Loader2 className="animate-spin text-blue-600 w-10 h-10" /></div>
+          ) : detailRes?.data && (() => {
+            const isApplied = appliedJobIds.has(detailRes.data.id);
+            const isSaved = detailRes.data.savedByUserIds?.includes(currentUserId);
+
+            return (
+              <div>
+                <div className="bg-slate-50 p-6 flex items-end gap-4 border-b">
+                  <div className="w-16 h-16 bg-white rounded-xl flex items-center justify-center text-2xl font-bold text-blue-600 shadow-sm border">
+                    {detailRes.data.company?.name?.[0]}
+                  </div>
+                  <div>
+                    <DialogTitle className="text-2xl font-bold">{detailRes.data.title}</DialogTitle>
+                    <p className="text-blue-600 font-medium">{detailRes.data.company?.name}</p>
+                  </div>
+                </div>
+
+                <div className="p-8 space-y-8">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-3 bg-slate-50 rounded-lg text-center">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Lương</p>
+                      <p className="text-sm font-bold">{detailRes.data.salaryRange}</p>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-lg text-center">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Địa điểm</p>
+                      <p className="text-sm font-bold">{detailRes.data.location}</p>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-lg text-center">
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Hạn nộp</p>
+                      <p className="text-sm font-bold">{new Date(detailRes.data.deadline).toLocaleDateString('vi-VN')}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6 text-sm leading-relaxed">
+                    <div><h4 className="font-bold mb-2">Mô tả công việc</h4><div className="text-slate-600 whitespace-pre-line">{detailRes.data.description}</div></div>
+                    <div><h4 className="font-bold mb-2">Yêu cầu</h4><div className="text-slate-600 whitespace-pre-line">{detailRes.data.requirements}</div></div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center gap-4">
+                    {isApplied ? (
+                      <Button disabled className="flex-1 bg-emerald-50 text-emerald-600 h-12 border-emerald-100 border">
+                        <CheckCircle2 className="w-5 h-5 mr-2" /> Đã ứng tuyển thành công
+                      </Button>
+                    ) : (
+                      <Button 
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 h-12 text-lg shadow-lg shadow-blue-200"
+                        onClick={() => applyMutation.mutate(detailRes.data.id)}
+                        disabled={applyMutation.isPending}
+                      >
+                        {applyMutation.isPending ? <Loader2 className="animate-spin mr-2" /> : "Ứng tuyển ngay"}
+                      </Button>
+                    )}
+                    <Button 
+                      variant="outline" className={`h-12 px-6 ${isSaved ? "text-pink-600 border-pink-100 bg-pink-50" : ""}`}
+                      onClick={() => saveMutation.mutate(detailRes.data.id)}
+                    >
+                      <Heart className={`w-5 h-5 mr-2 ${isSaved ? "fill-pink-600" : ""}`} /> 
+                      {isSaved ? "Đã lưu" : "Lưu tin"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
