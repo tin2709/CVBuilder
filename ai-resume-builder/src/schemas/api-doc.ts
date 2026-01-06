@@ -942,18 +942,26 @@ export const createNotificationDoc = createRoute({
   method: 'post',
   path: '/create',
   tags: ['User - Notifications'],
-  summary: 'Tạo thông báo mới (Admin/Hệ thống)',
+  summary: 'Tạo thông báo mới',
   request: { 
     body: { content: { 'application/json': { schema: system.CreateNotificationSchema } } } 
   },
   responses: {
     201: { 
       content: { 'application/json': { schema: system.NotificationSchema } }, 
-      description: 'Tạo thông báo thành công' 
+      description: 'Tạo mới thành công' 
+    },
+    200: { 
+      content: { 'application/json': { schema: system.NotificationSchema } }, 
+      description: 'Gom thông báo hoặc đã tồn tại' 
     },
     400: { 
       content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
       description: 'Lỗi dữ liệu' 
+    },
+    409: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Xung đột dữ liệu/Đang xử lý' 
     },
   },
 });

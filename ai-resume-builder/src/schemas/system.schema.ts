@@ -14,13 +14,20 @@ export const CreateCategorySchema = CategorySchema.omit({
 }).openapi('CreateCategoryRequest');
 export const NotificationSchema = z.object({
   id: z.string(),
-  title: z.string(),
-  message: z.string(),
+  templateKey: z.string().openapi({ example: 'APP_STATUS_CHANGED' }),
+  // Payload là một object JSON linh hoạt
+payload: z.record(z.string(), z.any()).nullable().openapi({ 
+  example: { jobTitle: 'React Developer', company: 'AI Tech' } 
+}),
+  content: z.string().nullable().openapi({ 
+    example: 'Hồ sơ của bạn tại AI Tech đã được duyệt!' 
+  }),
   type: z.enum(['APPLICATION_STATUS', 'NEW_INTERVIEW', 'AI_SCREENING_DONE', 'NEW_MESSAGE', 'SYSTEM']),
   isRead: z.boolean(),
-  // Khi dùng c.json, Date sẽ bị biến thành String ISO, nên ta để z.string()
+  link: z.string().nullable(),
   createdAt: z.string().openapi({ example: '2024-01-01T00:00:00Z' }), 
 }).openapi('Notification');
+
 
 export const CategoryIdParamSchema = z.object({
   id: z.string().openapi({ 
@@ -44,9 +51,12 @@ export const BulkDeleteCategorySchema = z.object({
 // src/schemas/system.schema.ts
 
 export const CreateNotificationSchema = z.object({
-  userId: z.string().openapi({ example: '674d356297f8fec783c70a26', description: 'ID người nhận' }),
-  title: z.string().min(1).openapi({ example: 'Chúc mừng!' }),
-  message: z.string().min(1).openapi({ example: 'Hồ sơ của bạn đã được nhà tuyển dụng xem.' }),
-  type: z.enum(['APPLICATION_STATUS', 'NEW_INTERVIEW', 'AI_SCREENING_DONE', 'NEW_MESSAGE', 'SYSTEM']).openapi({ example: 'SYSTEM' }),
-  link: z.string().nullable().optional().openapi({ example: '/candidate/applications' }),
+  userId: z.string().openapi({ example: '674d356297f8fec783c70a26' }),
+  templateKey: z.string().openapi({ example: 'NEW_INTERVIEW' }),
+ payload: z.record(z.string(), z.any()).openapi({ 
+  example: { candidateName: 'An', time: '10:00 AM' } 
+}),
+  type: z.enum(['APPLICATION_STATUS', 'NEW_INTERVIEW', 'AI_SCREENING_DONE', 'NEW_MESSAGE', 'SYSTEM']),
+  link: z.string().nullable().optional(),
+  targetId: z.string().optional().openapi({ example: '674d35629...abc' }),
 }).openapi('CreateNotificationRequest');

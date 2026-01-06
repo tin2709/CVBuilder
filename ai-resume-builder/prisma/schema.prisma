@@ -257,17 +257,25 @@ model Category {
   jobs      Job[]    // Quan hệ 1-Nhiều với Job
 }
 model Notification {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId    String   @db.ObjectId
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String   @db.ObjectId
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  title     String
-  message   String
-  type      NotificationType
-  isRead    Boolean  @default(false)
-  link      String?  // Link để click vào xem chi tiết (VD: /candidate/interviews/...)
+  templateKey    String
+  payload        Json?    // Sẽ chứa trường "count" cho digest
+  content        String?
+  type           NotificationType
+  isRead         Boolean  @default(false)
+  link           String?
   
-  createdAt DateTime @default(now())
+  // --- FIELDS CHO DIGEST ---
+  isDigested     Boolean  @default(false)
+  digestCount    Int      @default(1)
+  digestKey      String?  @unique // Để tìm nhanh thông báo cần gom (VD: "DIGEST-userId-templateKey-targetId")
+
+  idempotencyKey String?  @unique 
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt // Cần thiết để tính cửa sổ 10 phút
 }
 enum SharingMode {
   PRIVATE      // Chỉ chủ sở hữu
