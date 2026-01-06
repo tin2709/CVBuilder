@@ -19,7 +19,10 @@ export const QAResponseSchema = z.object({
   answer: z.string().nullable(),
   isPublic: z.boolean(),
   createdAt: z.string(),
-  sender: z.object({ name: z.string().nullable() }).optional(),
+   sender: z.object({ 
+    id: z.string(), // Thêm trường id người gửi vào đây
+    name: z.string().nullable() 
+  }).optional(),
 }).openapi('QAResponse');
 
 // Response chuẩn cho API

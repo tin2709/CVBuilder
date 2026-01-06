@@ -20,5 +20,14 @@ export const qaClientService = {
       headers: { Authorization: `Bearer ${token}` }
     });
     return await res.json();
-  }
+  },
+   async getJobQA(jobId: string) {
+    const token = localStorage.getItem("accessToken");
+    const res = await client.api.qa.jobs[":id"].$get({
+      param: { id: jobId }
+    }, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    return await res.json();
+  },
 };

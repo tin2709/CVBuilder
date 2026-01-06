@@ -1,5 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
-import { askQuestionDoc, answerQuestionDoc } from '@/schemas/api-doc';
+import { askQuestionDoc, answerQuestionDoc,getJobQADoc } from '@/schemas/api-doc';
 import { prisma } from '@/lib/db';
 import { verifyRole } from '@/middlewares/auth.middleware';
 
@@ -79,5 +79,65 @@ qaRoute.openapi(answerQuestionDoc, async (c) => {
     return c.json({ success: false, message: error.message }, 400);
   }
 });
+qaRoute.use('/jobs/:id', verifyRole('CANDIDATE'));
+qaRoute.openapi(getJobQADoc, async (c) => {
+  const { id: jobId } = c.req.valid('param');
+  const payload = c.get('jwtPayload');
+  const userId = payload?.id;
 
+  try {
+    // 1. Kiểm tra Job tồn tại
+    const jobExists = await prisma.job.findUnique({ where: { id: jobId } });
+    if (!jobExists) {
+      return c.json({ success: false, message: "Không tìm thấy bài đăng" }, 404);
+    }
+
+    // 2. Xây dựng điều kiện lọc động để tránh lỗi ObjectID "" (rỗng)
+    const orConditions: any[] = [{ isPublic: true }];
+    if (userId && userId.length === 24) {
+      orConditions.push({ senderId: userId });
+      orConditions.push({ recruiterId: userId });
+    }
+
+    const questions = await prisma.question.findMany({
+      where: {
+        jobId: jobId,
+        OR: orConditions
+      },
+      include: {
+        sender: {
+          select: { 
+            id: true,    // Lấy ID người gửi
+            name: true   // Lấy tên người gửi
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // 3. Format dữ liệu trả về khớp với Schema mới
+    const formattedData = questions.map(q => ({
+      id: q.id,
+      content: q.content,
+      answer: q.answer,
+      isPublic: q.isPublic,
+      createdAt: q.createdAt.toISOString(),
+      sender: q.sender ? { 
+        id: q.sender.id,   // Trả về ID người gửi ở đây
+        name: q.sender.name 
+      } : undefined
+    }));
+
+    return c.json({
+      success: true,
+      data: formattedData
+    }, 200);
+
+  } catch (error: any) {
+    return c.json({ 
+      success: false, 
+      message: error.message || "Lỗi hệ thống" 
+    }, 400);
+  }
+});
 export default qaRoute;

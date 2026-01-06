@@ -496,14 +496,30 @@ export const answerQuestionDoc = createRoute({
 });
 
 // 3. Lấy danh sách Q&A cho một bài Job
+// api-doc.ts
+
 export const getJobQADoc = createRoute({
   method: 'get',
-  path: '/jobs/{id}/qa',
-  tags: [TAG_QA],
+  path: '/jobs/:id',
+  tags: ['Q&A System'],
   summary: 'Lấy danh sách Q&A (Hỗ trợ ẩn/hiện theo quyền)',
-  request: { params: job.JobIdParamSchema },
+  request: { 
+    params: job.JobIdParamSchema 
+  },
   responses: {
-    200: { content: { 'application/json': { schema: qa.QAListResponseSchema } }, description: 'Thành công' },
+    200: { 
+      content: { 'application/json': { schema: qa.QAListResponseSchema } }, 
+      description: 'Thành công' 
+    },
+    // THÊM DÒNG NÀY:
+    400: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Lỗi yêu cầu' 
+    },
+    404: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Không tìm thấy Job' 
+    }
   },
 });
 // 1. Gửi yêu cầu TẠO
