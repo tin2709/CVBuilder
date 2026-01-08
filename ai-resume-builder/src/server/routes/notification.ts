@@ -8,7 +8,7 @@ import {
   createNotificationDoc,
 } from '@/schemas/api-doc';
 import { NOTIFICATION_TEMPLATES, NotificationTemplateKey } from '@/constants/notifications';
-import crypto from 'crypto'; // Thư viện tạo hash
+import crypto from 'crypto';
 
 // Khởi tạo LiquidJS engine
 const engine = new Liquid();
@@ -21,39 +21,10 @@ type Variables = {
   }
 }
 
-const notificationRoute = new OpenAPIHono<{ Variables: Variables }>();
+// Hàm lấy socket io từ global (đã được gán ở server.ts)
+const getGlobalIo = () => (global as any).io;
 
-/**
- * 1. LẤY TẤT CẢ THÔNG BÁO CỦA NGƯỜI DÙNG HIỆN TẠI
- * Route: GET /all
- */
-notificationRoute.openapi(getMyNotificationsDoc, async (c) => {
-  const user = c.get('jwtPayload');
-
-  try {
-    const notifications = await prisma.notification.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' },
-      take: 50 // Giới hạn 50 thông báo gần nhất
-    });
-
-    // Chuyển đổi Date sang ISO String để khớp với Zod Schema
-    const formatted = notifications.map(n => ({
-      ...n,
-      createdAt: n.createdAt.toISOString(),
-      payload: n.payload as Record<string, any>
-    }));
-
-    return c.json(formatted, 200);
-  } catch (error: any) {
-    return c.json({ success: false, message: error.message }, 400);
-  }
-});
-
-/**
- * 2. TẠO THÔNG BÁO MỚI (Dành cho Recruiter hoặc Hệ thống)
- * Route: POST /create
- */
+// Hàm helper để chuẩn hóa dữ liệu trả về khớp với NotificationSchema
 const mapToNotificationSchema = (n: any) => ({
   id: n.id,
   templateKey: n.templateKey,
@@ -64,17 +35,44 @@ const mapToNotificationSchema = (n: any) => ({
   link: n.link || null,
   createdAt: n.createdAt.toISOString(),
 });
-notificationRoute.use('/create', verifyRole(['RECRUITER', 'ADMIN'])); // Chỉ Recruiter/Admin mới được tạo chủ động
+
+const notificationRoute = new OpenAPIHono<{ Variables: Variables }>();
+
+/**
+ * 1. LẤY TẤT CẢ THÔNG BÁO CỦA NGƯỜI DÙNG HIỆN TẠI
+ */
+notificationRoute.openapi(getMyNotificationsDoc, async (c) => {
+  const user = c.get('jwtPayload');
+
+  try {
+    const notifications = await prisma.notification.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50 
+    });
+
+    const formatted = notifications.map(n => mapToNotificationSchema(n));
+    return c.json(formatted, 200);
+  } catch (error: any) {
+    return c.json({ success: false, message: error.message }, 400);
+  }
+});
+
+/**
+ * 2. TẠO THÔNG BÁO MỚI (Digest + Idempotency + Socket.io)
+ */
+notificationRoute.use('/create', verifyRole(['RECRUITER', 'ADMIN']));
 
 notificationRoute.openapi(createNotificationDoc, async (c) => {
   const { userId, templateKey, payload, link, targetId } = c.req.valid('json');
-  const DIGEST_WINDOW_MS = 10 * 60 * 1000;
+  const DIGEST_WINDOW_MS = 10 * 60 * 1000; // 10 phút
+  const io = getGlobalIo(); // Lấy instance Socket.io
 
   try {
     const template = NOTIFICATION_TEMPLATES[templateKey as NotificationTemplateKey];
     if (!template) return c.json({ success: false, message: "Template không hợp lệ" }, 400);
 
-    // 1. Xử lý Digest
+    // --- BƯỚC 1: XỬ LÝ DIGEST (GOM THÔNG BÁO) ---
     if (template.allowDigest && targetId) {
       const digestKey = `DIGEST-${userId}-${templateKey}-${targetId}`;
       const existingDigest = await prisma.notification.findFirst({
@@ -103,12 +101,16 @@ notificationRoute.openapi(createNotificationDoc, async (c) => {
           }
         });
 
-        return c.json(mapToNotificationSchema(updatedNoti), 200);
+        const formatted = mapToNotificationSchema(updatedNoti);
+        
+        // Gửi socket cập nhật (gom nhóm)
+        if (io) io.to(userId).emit('notification_updated', formatted);
+
+        return c.json(formatted, 200);
       }
     }
 
     // --- BƯỚC 2: XỬ LÝ IDEMPOTENCY (CHỐNG TRÙNG LẶP) ---
-    // Dành cho các thông báo quan trọng, không gom (thường dành cho Candidate)
     let idempotencyKey: string | null = null;
     if (targetId && !template.allowDigest) {
       const rawKey = `${userId}-${templateKey}-${targetId}`;
@@ -124,7 +126,6 @@ notificationRoute.openapi(createNotificationDoc, async (c) => {
     }
 
     // --- BƯỚC 3: RENDER VÀ TẠO MỚI ---
-    // count mặc định là 1 cho lần đầu tiên
     const finalPayload = template.allowDigest ? { ...payload, count: 1 } : payload;
     const renderedContent = await engine.parseAndRender(template.body, finalPayload);
 
@@ -136,25 +137,29 @@ notificationRoute.openapi(createNotificationDoc, async (c) => {
         content: renderedContent,
         type: template.type as any,
         link: link || null,
-        idempotencyKey, // null nếu là digest
+        idempotencyKey,
         digestKey: template.allowDigest && targetId ? `DIGEST-${userId}-${templateKey}-${targetId}` : null,
         digestCount: 1
-      }
+      } as any
     });
 
-    return c.json(mapToNotificationSchema(newNotification), 201);
+    const formatted = mapToNotificationSchema(newNotification);
+
+    // Gửi socket thông báo mới
+    if (io) io.to(userId).emit('new_notification', formatted);
+
+    return c.json(formatted, 201);
 
   } catch (error: any) {
-    // Xử lý lỗi Unique Constraint (P2002) nếu có 2 request đến cùng lúc
     if (error.code === 'P2002') {
-      return c.json({ success: false, message: "Yêu cầu đang được xử lý, vui lòng thử lại." }, 409);
+      return c.json({ success: false, message: "Yêu cầu đang được xử lý." }, 409);
     }
     return c.json({ success: false, message: error.message }, 400);
   }
 });
+
 /**
  * 3. ĐÁNH DẤU MỘT THÔNG BÁO LÀ ĐÃ ĐỌC
- * Route: PATCH /:id/read
  */
 notificationRoute.openapi(markAsReadDoc, async (c) => {
   const user = c.get('jwtPayload');
@@ -163,12 +168,8 @@ notificationRoute.openapi(markAsReadDoc, async (c) => {
   try {
     const notification = await prisma.notification.findUnique({ where: { id } });
 
-    if (!notification) {
-      return c.json({ success: false, message: "Thông báo không tồn tại" }, 404);
-    }
-
-    if (notification.userId !== user.id) {
-      return c.json({ success: false, message: "Không có quyền" }, 403);
+    if (!notification || notification.userId !== user.id) {
+      return c.json({ success: false, message: "Không tìm thấy hoặc không có quyền" }, 403);
     }
 
     await prisma.notification.update({
@@ -181,6 +182,5 @@ notificationRoute.openapi(markAsReadDoc, async (c) => {
     return c.json({ success: false, message: error.message }, 400);
   }
 });
-
 
 export default notificationRoute;

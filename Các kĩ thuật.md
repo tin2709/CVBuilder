@@ -90,3 +90,27 @@ Dưới đây là các bộ dữ liệu mẫu (JSON) để bạn kiểm tra toà
 1.  **userId:** Bạn phải lấy một ID thật từ bảng `User` trong MongoDB của mình.
 2.  **targetId:** Để test **Digest**, `targetId` nên là ID của công việc (Job). Để test **Idempotency**, `targetId` nên là ID của đơn ứng tuyển hoặc lịch phỏng vấn.
 3.  **10 phút:** Nhớ rằng logic Digest chỉ gom nếu thông báo cũ chưa quá 10 phút. Nếu bạn đợi quá lâu mới gửi lần 2, nó sẽ tạo thông báo mới.
+
+ **Socket.io Emit:**
+    *   Lấy instance `io` từ biến `global`.
+    *   `io.to(userId).emit('new_notification', data)`: Gửi cho thông báo mới.
+    *   `io.to(userId).emit('notification_updated', data)`: Gửi khi gom nhóm.
+
+## 4. Cấu trúc Server (Port 3000)
+Thay vì sử dụng server mặc định của Next.js, chúng ta sử dụng một **Custom Server (`server.ts`)**.
+
+*   **Cơ chế:** Khởi tạo `http.createServer` -> Bọc `nextApp.getRequestHandler()` -> Gắn `new Server(httpServer)`.
+*   **Phân quyền Socket:** Mỗi người dùng khi kết nối sẽ được đưa vào một "Phòng" (Room) riêng biệt dựa trên `userId`.
+    *   `socket.join(userId)`: Đảm bảo thông báo chỉ gửi đúng đến người cần nhận.
+
+## 5. Hướng dẫn Test (Postman)
+
+1.  **Kết nối Socket:**
+    *   URL: `http://localhost:3000`
+    *   Params: `userId = <ID_CỦA_BẠN>`
+    *   Listen Events: `new_notification`, `notification_updated`.
+2.  **Gửi API:**
+    *   URL: `http://localhost:3000/api/notifications/create`
+    *   Header: `Authorization: Bearer <TOKEN>`
+    *   Body: Gửi đúng `userId` đã kết nối ở bước 1.
+3.  **Kiểm tra:** Quan sát tab Socket để thấy dữ liệu nhảy về Real-time.
