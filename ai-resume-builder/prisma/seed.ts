@@ -1,12 +1,13 @@
 import { PrismaClient, Role } from '@prisma/client';
-import { createClient } from 'redis';
+import { Redis } from 'ioredis'; 
 import * as dotenv from 'dotenv';
+import crypto from 'crypto'; // 1. Import thêm thư viện này
 
 dotenv.config();
 
 const prisma = new PrismaClient();
-const redisClient = createClient({
-  url: process.env.REDIS_URL || 'redis://127.0.0.1:6379'
+const redisClient = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
+    maxRetriesPerRequest: null
 });
 
 const candidatesData = [
@@ -70,7 +71,6 @@ const candidatesData = [
 ];
 
 async function main() {
-  await redisClient.connect();
   console.log('--- Cleaning Database ---');
   // 1. Xóa các bảng phụ thuộc sâu nhất trước (Các bảng con)
   await prisma.interview.deleteMany({});      // Interview phụ thuộc Application
@@ -113,6 +113,7 @@ async function main() {
             summary: item.summary,
             skills: item.skills,
             softSkills: item.softSkills,
+            shareToken: crypto.randomBytes(16).toString('hex'), 
             // Tạo các bảng con
             workExperiences: {
               create: item.experiences
@@ -134,17 +135,17 @@ async function main() {
     const profileId = user.candidateProfiles[0].id;
 
     // Đẩy lên Redis JSON để phục vụ tìm kiếm (Flatten dữ liệu cho Redis Search)
-    await redisClient.json.set(`candidate:${profileId}`, '$', {
-      id: profileId,
-      name: item.name,
-      headline: item.headline,
-      skills: item.skills,
-      summary: item.summary,
-      // Ta có thể lưu thêm text từ kinh nghiệm để search thông minh hơn
-      allText: `${item.headline} ${item.skills.join(' ')} ${item.summary} ${item.experiences.map(e => e.companyName).join(' ')}`
-    });
+    await redisClient.call('JSON.SET', `candidate:${profileId}`, '$', JSON.stringify({
+            id: profileId,
+            name: item.name,
+            headline: item.headline,
+            skills: item.skills,
+            summary: item.summary,
+            allText: `${item.headline} ${item.skills.join(' ')} ${item.summary} ${item.experiences.map(e => e.companyName).join(' ')}`
+        }));
 
-    console.log(`Successfully seeded: ${item.name} (Profile ID: ${profileId})`);
+        console.log(`Successfully seeded: ${item.name} (Profile ID: ${profileId})`);
+    
   }
 
   console.log('--- Seed Finished! ---');

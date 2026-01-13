@@ -51,15 +51,33 @@ candidateRoute.openapi(doc.candidateSearchDoc, async (c) => {
 
   try {
     const smartQuery = `(${q}*) | (@skills:{${q}*})`;
-    const searchResult: any = await redis.ft.search('idx:candidates', smartQuery, {
-      LIMIT: { from: 0, size: 10 }
-    });
+     const rawResult = await redis.call(
+        'FT.SEARCH', 
+        'idx:candidates', 
+        smartQuery, 
+        'LIMIT', '0', '10'
+    ) as any[];
+
+    const total = rawResult[0] || 0;
+    const results = [];
+
+    // Parse mảng phẳng từ FT.SEARCH (Lấy các giá trị JSON)
+    for (let i = 1; i < rawResult.length; i += 2) {
+      const fields = rawResult[i + 1];
+      // Trong RedisJSON Search, trường JSON nằm ở index 1 của mảng fields
+      const jsonString = fields[1]; 
+      if (jsonString) {
+        results.push(JSON.parse(jsonString));
+      }
+    }
+
     return c.json({
       success: true,
-      total: searchResult.total,
-      results: searchResult.documents.map((doc: any) => doc.value)
+      total: total,
+      results: results
     }, 200);
-  } catch (error) {
+  } catch (error: any) {
+    console.error(error);
     return c.json({ success: false, message: 'Tìm kiếm thất bại' }, 500);
   }
 });
@@ -95,25 +113,45 @@ candidateRoute.openapi(doc.getMyProfileDoc, async (c) => {
 });
 
 // --- TẠO HỒ SƠ ---
+candidateRoute.use('/me/create-profile', verifyRole("CANDIDATE"));
 candidateRoute.openapi(doc.createCandidateProfileDoc, async (c) => {
-  const userId = getSafeUserId(c);
-  const data = c.req.valid('json');
+  try {
+    const userId = getSafeUserId(c);
+    const data = c.req.valid('json');
 
-  const existing = await prisma.candidateProfile.findUnique({ where: { userId } });
-  if (existing) return c.json({ message: "Profile already exists" }, 400);
+    const existing = await prisma.candidateProfile.findUnique({ where: { userId } });
+    if (existing) return c.json({ message: "Profile already exists" }, 400);
 
-  const profile = await prisma.candidateProfile.create({ data: { ...data, userId } });
+    // Lọc bỏ shareToken ra khỏi data để tránh gửi chuỗi rỗng hoặc null gây lỗi Unique
+    const { shareToken, ...restData } = data as any;
 
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  await redis.json.set(`candidate:${profile.id}`, '$', {
-    id: profile.id,
-    name: user?.name ?? '',
-    headline: profile.headline ?? '',
-    skills: profile.skills,
-    summary: profile.summary ?? ''
-  } as any);
+    const profile = await prisma.candidateProfile.create({
+      data: {
+        ...restData,
+        userId,
+        // Đảm bảo shareToken không bị gán chuỗi rỗng "" 
+        // Nếu schema cho phép null, hãy để Prisma tự xử lý hoặc gán undefined
+        shareToken: undefined 
+      }
+    });
 
-  return c.json({ success: true, data: profile as any }, 201);
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    // Lưu vào Redis
+    await redis.call('JSON.SET', `candidate:${profile.id}`, '$', JSON.stringify({
+      id: profile.id,
+      name: user?.name ?? '',
+      headline: profile.headline ?? '',
+      skills: profile.skills,
+      summary: profile.summary ?? ''
+    }));
+
+    return c.json({ success: true, data: profile as any }, 201);
+  } catch (error: any) {
+    // Nếu vẫn lỗi P2002, có thể do bản ghi cũ trong DB. Hãy xóa trắng DB để test lại.
+    console.error("Prisma Error:", error);
+    return c.json({ success: false, message: error.message }, 500);
+  }
 });
 
 // --- CẬP NHẬT HỒ SƠ ---
@@ -126,13 +164,13 @@ candidateRoute.openapi(doc.updateCandidateProfileDoc, async (c) => {
   const updated = await prisma.candidateProfile.update({ where: { userId }, data });
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  await redis.json.set(`candidate:${updated.id}`, '$', {
+  await redis.call('JSON.SET', `candidate:${updated.id}`, '$', JSON.stringify({
     id: updated.id,
     name: user?.name ?? '',
     headline: updated.headline ?? '',
     skills: updated.skills,
     summary: updated.summary ?? ''
-  } as any);
+  }));
   
   return c.json({ success: true, message: "Profile updated" }, 200);
 });

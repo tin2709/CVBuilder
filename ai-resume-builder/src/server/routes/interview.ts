@@ -2,6 +2,7 @@ import { OpenAPIHono } from '@hono/zod-openapi';
 import { prisma } from '@/lib/db';
 import { verifyRole } from '@/middlewares/auth.middleware';
 import * as doc from '@/schemas/api-doc';
+import { addInterviewReminder, reminderQueue, addMailJob } from '@/queues/reminder.queue';
 
 type Variables = { jwtPayload: { id: string; role: string } }
 const interviewRoute = new OpenAPIHono<{ Variables: Variables }>();
@@ -10,37 +11,70 @@ const interviewRoute = new OpenAPIHono<{ Variables: Variables }>();
 interviewRoute.use('/create', verifyRole('RECRUITER')); // Chỉ áp dụng cho POST nộp đơn
 
 // [API: TẠO LỊCH]
+
 interviewRoute.openapi(doc.createInterviewDoc, async (c) => {
   const payload = c.get('jwtPayload');
   const { applicationId, date, notes } = c.req.valid('json');
 
   try {
-    // Kiểm tra xem đơn ứng tuyển có thuộc về công ty của Recruiter này không
+    // 1. Kiểm tra quyền và lấy thông tin chi tiết (Email, Tên ứng viên, Tên job)
     const application = await prisma.application.findUnique({
       where: { id: applicationId },
-      include: { job: true }
+      include: { 
+        job: true,
+        candidate: {
+          include: { user: { select: { email: true, name: true } } }
+        }
+      }
     });
 
-    if (!application || application.job.recruiterId !== payload.id) {
+    if (!application) {
+      return c.json({ success: false, message: "Không tìm thấy đơn ứng tuyển" }, 404);
+    }
+
+    if (application.job.recruiterId !== payload.id) {
       return c.json({ success: false, message: "Không có quyền tạo lịch cho đơn này" }, 403);
     }
 
-    await prisma.interview.create({
+    // 2. Tạo bản ghi phỏng vấn trong Database
+    const newInterview = await prisma.interview.create({
       data: {
         applicationId,
         date: new Date(date),
         notes,
+        status: 'PENDING'
       }
     });
 
-    // Cập nhật trạng thái đơn ứng tuyển sang 'INTERVIEW'
+    // 3. BULLMQ - Gửi Email mời phỏng vấn NGAY LẬP TỨC
+    await addMailJob({
+      to: application.candidate.user.email,
+      subject: `[Mời phỏng vấn] Vị trí ${application.job.title}`,
+      templateKey: 'INTERVIEW_INVITE',
+      payload: {
+        candidateName: application.candidate.user.name || "Ứng viên",
+        jobTitle: application.job.title,
+        interviewTime: new Date(date).toLocaleString('vi-VN'),
+        notes: notes || "Không có ghi chú thêm"
+      }
+    });
+
+    // 4. BULLMQ - Lên lịch nhắc nhở TRƯỚC 1 TIẾNG (Chạy ngầm với delay)
+    await addInterviewReminder(newInterview.id, new Date(date));
+
+    // 5. Cập nhật trạng thái đơn ứng tuyển sang 'INTERVIEW'
     await prisma.application.update({
       where: { id: applicationId },
       data: { status: 'INTERVIEW' }
     });
 
-    return c.json({ success: true, message: "Đã lên lịch phỏng vấn" }, 201);
+    return c.json({ 
+      success: true, 
+      message: "Đã lên lịch, gửi mail mời và đặt nhắc nhở tự động thành công!" 
+    }, 201);
+
   } catch (error: any) {
+    console.error("Lỗi tạo phỏng vấn:", error);
     return c.json({ success: false, message: error.message }, 400);
   }
 });
@@ -69,6 +103,9 @@ interviewRoute.openapi(doc.updateInterviewDoc, async (c) => {
       date: body.date ? new Date(body.date) : undefined,
     }
   });
+  if (body.date) {
+    await addInterviewReminder(id, new Date(body.date));
+  }
 
   return c.json({ success: true, data: updated });
 });
@@ -144,7 +181,11 @@ interviewRoute.openapi(doc.deleteInterviewDoc, async (c) => {
   }
 
   await prisma.interview.delete({ where: { id } });
-  return c.json({ success: true, message: "Đã xóa buổi phỏng vấn" });
+  const job = await reminderQueue.getJob(`reminder-${id}`);
+  if (job) await job.remove();
+
+  return c.json({ success: true, message: "Đã xóa buổi phỏng vấn và lịch nhắc nhở" });
+
 });
 
 // [API: XÓA NHIỀU BẢN GHI]
@@ -164,10 +205,12 @@ interviewRoute.openapi(doc.bulkDeleteInterviewsDoc, async (c) => {
       }
     });
 
-    return c.json({ 
-      success: true, 
-      message: `Đã xóa thành công ${deleteResult.count} mục` 
-    });
+     for (const id of ids) {
+      const job = await reminderQueue.getJob(`reminder-${id}`);
+      if (job) await job.remove();
+    }
+
+    return c.json({ success: true, message: `Đã xóa ${deleteResult.count} mục và các nhắc nhở liên quan` });
   } catch (error: any) {
     return c.json({ success: false, message: error.message }, 400);
   }

@@ -636,6 +636,10 @@ export const createInterviewDoc = createRoute({
     201: { content: { 'application/json': { schema: interview.ErrorResponseSchema } }, description: 'Tạo thành công' },
     400: { content: { 'application/json': { schema: interview.ErrorResponseSchema } }, description: 'Lỗi dữ liệu' },
     403: { content: { 'application/json': { schema: interview.ErrorResponseSchema } }, description: 'Không có quyền' },
+    404: { 
+      content: { 'application/json': { schema: interview.ErrorResponseSchema } }, 
+      description: 'Không tìm thấy đơn ứng tuyển' 
+    },
   },
 });
 

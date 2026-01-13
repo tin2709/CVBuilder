@@ -3,6 +3,9 @@ import { createServer } from "http";
 import { parse } from "url";
 import next from "next";
 import { Server } from "socket.io";
+import "./queues/reminder.queue"
+import "./queues/reminder.worker"
+import "./queues/mail.worker"
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
