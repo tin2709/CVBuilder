@@ -255,3 +255,78 @@ EMAIL_PASS=xxxx xxxx xxxx xxxx (Mật khẩu ứng dụng 16 số)
 
 ---
 **Lưu ý:** Đối với môi trường Production, hãy đảm bảo Redis không bị đầy dung lượng bằng cách sử dụng cấu hình `removeOnComplete: true` và `removeOnFail: { count: 100 }`.
+
+Dưới đây là bản tóm tắt kỹ thuật trích xuất thông tin việc làm từ URL sử dụng bộ ba thư viện **Axios, JSDOM và Readability** dành cho dự án của bạn.
+
+---
+
+# 🛠 Tài liệu Kỹ thuật: Trích xuất nội dung Job từ URL (Job Scraping & Cleaning)
+
+## 1. Giới thiệu
+Kỹ thuật này cho phép Nhà tuyển dụng nhập một đường dẫn (URL) bài đăng tuyển dụng bất kỳ. Hệ thống sẽ tự động truy cập, loại bỏ các thành phần rác (quảng cáo, menu, footer) và trích xuất nội dung cốt lõi (Tiêu đề, Mô tả, Yêu cầu) để tự động điền vào form đăng tin.
+
+## 2. Các thư viện sử dụng
+*   **Axios**: Thư viện HTTP Client dùng để tải nội dung HTML thô từ URL đích.
+*   **JSDOM**: Giả lập môi trường trình duyệt (DOM) trong môi trường Node.js để có thể thao tác với HTML.
+*   **@mozilla/readability**: Thư viện do Mozilla phát triển (dùng cho tính năng "Reader View" của Firefox), giúp lọc bỏ các thành phần thừa và chỉ giữ lại nội dung chính của bài viết.
+
+## 3. Quy trình xử lý (Workflow)
+
+1.  **Tải HTML**: Gửi yêu cầu GET tới URL bằng Axios với các Header giả lập người dùng thật (User-Agent) để tránh bị chặn (Error 403).
+2.  **Khởi tạo DOM**: Đưa dữ liệu HTML thô vào JSDOM để tạo ra một đối tượng Document.
+3.  **Lọc nội dung sạch**: Sử dụng Readability để phân tích Document. Kết quả trả về gồm có:
+    *   `title`: Tiêu đề bài đăng.
+    *   `textContent`: Toàn bộ nội dung văn bản đã được lọc "sạch" rác.
+    *   `siteName`: Tên trang web nguồn.
+4.  **Bóc tách dữ liệu (Parsing)**: Sử dụng logic tìm kiếm từ khóa (Regex hoặc String mapping) hoặc tích hợp AI để chia nội dung sạch vào các trường: `Mô tả công việc`, `Yêu cầu ứng viên`, `Mức lương`.
+
+## 4. Mã nguồn triển khai mẫu
+
+```typescript
+import axios from 'axios';
+import { JSDOM } from 'jsdom';
+import { Readability } from '@mozilla/readability';
+
+async function importJobFromLink(url: string) {
+  // 1. Tải HTML với Header giả lập trình duyệt
+  const response = await axios.get(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+    }
+  });
+
+  // 2. Tạo DOM ảo
+  const dom = new JSDOM(response.data, { url });
+
+  // 3. Sử dụng Readability để lọc nội dung chính
+  const reader = new Readability(dom.window.document);
+  const article = reader.parse();
+
+  if (article) {
+    return {
+      title: article.title,
+      content: article.textContent, // Nội dung "sạch" rác
+      company: article.siteName
+    };
+  }
+}
+```
+
+## 5. Ưu điểm và Hạn chế
+
+### ✅ Ưu điểm
+*   **Tốc độ cực nhanh**: Xử lý trong mili giây vì không cần mở trình duyệt thật.
+*   **Tiết kiệm tài nguyên**: Tiết kiệm 70-80% dung lượng text so với HTML thô, đặc biệt hiệu quả khi gửi dữ liệu cho AI xử lý tiếp (giảm chi phí Token).
+*   **Trải nghiệm người dùng**: Giúp Nhà tuyển dụng đăng tin nhanh chóng mà không cần copy-paste thủ công.
+
+### ⚠️ Hạn chế & Giải pháp
+*   **Chống Bot (Anti-bot)**: Một số trang lớn (LinkedIn, Indeed) có thể chặn request (Lỗi 403). 
+    *   *Giải pháp:* Sử dụng Proxy hoặc chuyển sang dùng Playwright cho các link khó.
+*   **Nội dung động (SPA)**: Các trang web render hoàn toàn bằng JavaScript sau khi load sẽ không lấy được dữ liệu bằng Axios.
+    *   *Giải pháp:* Ưu tiên các trang tuyển dụng có cấu trúc HTML tĩnh hoặc dùng hệ thống ATS (Lever, Greenhouse).
+
+## 6. Ứng dụng trong dự án
+Hệ thống tích hợp tính năng này vào Route `POST /api/jobs/import-link`. Dữ liệu sau khi trích xuất sẽ được trả về Frontend để đổ vào các ô nhập liệu trong trang "Tạo tin tuyển dụng", giúp quy trình của Nhà tuyển dụng trở nên chuyên nghiệp và thông minh hơn.
+
+---
+**Ghi chú:** Luôn luôn cung cấp giá trị mặc định cho các trường dữ liệu (`?? ""`) để đảm bảo tính ổn định của hệ thống TypeScript.

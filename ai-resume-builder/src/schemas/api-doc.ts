@@ -369,6 +369,45 @@ export const deleteManyJobsDoc = createRoute({
     403: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Không có quyền' },
   },
 });
+// src/schemas/api-doc.ts
+
+export const importJobFromLinkDoc = createRoute({
+  method: 'post',
+  path: '/import-link',
+  tags: ['Job - Management'],
+  summary: 'Trích xuất thông tin Job từ URL (Readability)',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            url: z.string().url().openapi({ example: 'https://topdev.vn/viec-lam/hris-technical-specialist-ngan-hang-tmcp-cong-thuong-viet-nam-vietinbank-2085312?src=home&medium=superhotjobs' })
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            success: z.boolean(),
+            data: z.object({
+              title: z.string(),
+              description: z.string(),
+              requirements: z.string(),
+              location: z.string().nullable(),
+              companyName: z.string().nullable(),
+            })
+          })
+        }
+      },
+      description: 'Trích xuất thành công'
+    },
+    400: { description: 'Lỗi trích xuất' }
+  }
+});
 // --- Get My Jobs Doc ---
 export const getMyJobsDoc = createRoute({
   method: 'get',

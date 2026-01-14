@@ -2,9 +2,13 @@ import { OpenAPIHono } from '@hono/zod-openapi';
 import { createJobDoc,updateJobDoc, deleteJobDoc,deleteManyJobsDoc,getMyJobsDoc,toggleSaveJobDoc,
   getJobsDoc, 
   getJobByIdDoc, 
-  getSavedJobsDoc 
+  getSavedJobsDoc,
+  importJobFromLinkDoc 
  } from '@/schemas/api-doc';
 import { prisma } from '@/lib/db';
+import { Readability } from '@mozilla/readability';
+import { JSDOM } from 'jsdom';
+import axios from 'axios';
 import { verifyRole } from '@/middlewares/auth.middleware';
 
 // 1. Định nghĩa kiểu dữ liệu khớp với những gì Middleware lưu trữ
@@ -15,13 +19,94 @@ type Variables = {
     email: string;
   }
 }
+function manualParseJob(title: string, text: string) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  
+  let requirements = "";
+  let description = "";
+  let currentSection = "description";
 
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    // Logic nhận diện section
+    if (lower.includes("yêu cầu") || lower.includes("requirement") || lower.includes("kỹ năng")) {
+      currentSection = "requirements";
+      continue;
+    }
+    if (lower.includes("quyền lợi") || lower.includes("benefit") || lower.includes("chế độ")) {
+      currentSection = "benefits"; // Tạm thời bỏ qua benefits hoặc gộp vào desc
+      continue;
+    }
+
+    if (currentSection === "requirements") requirements += line + "\n";
+    else description += line + "\n";
+  }
+
+  return {
+    title: title || lines[0] || "",
+    description: description.trim(),
+    requirements: requirements.trim() || "Vui lòng kiểm tra lại nội dung trích xuất",
+  };
+}
 const jobRoute = new OpenAPIHono<{ Variables: Variables }>();
+jobRoute.use('/import-link', verifyRole('RECRUITER'));
+jobRoute.openapi(importJobFromLinkDoc, async (c) => {
+  const { url } = c.req.valid('json');
+
+  try {
+    // 1. Tải HTML (Giả danh trình duyệt để tránh bị chặn cơ bản)
+    const response = await axios.get(url, {
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'Referer': 'https://www.google.com/', // Giả vờ đến từ Google
+    'Sec-Ch-Ua': '"Not A(Bit<BR;vid";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+    'Sec-Ch-Ua-Mobile': '?0',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'cross-site',
+    'Sec-Fetch-User': '?1',
+    'Upgrade-Insecure-Requests': '1'
+  },
+  timeout: 15000 // Tăng thời gian chờ lên 15s
+});
+
+    // 2. Sử dụng Readability để làm sạch nội dung
+    const dom = new JSDOM(response.data, { url });
+    const reader = new Readability(dom.window.document);
+    const article = reader.parse();
+
+    if (!article || !article.textContent) {
+      return c.json({ success: false, message: "Không thể trích xuất nội dung từ trang web này" }, 400);
+    }
+
+    // 3. Sử dụng hàm bóc tách thủ công (Manual Parsing) 
+    // Nếu sau này bạn có AI (Gemini), hãy gửi article.textContent cho AI ở bước này
+const parsedData = manualParseJob(
+  article.title ?? "", 
+  article.textContent ?? ""
+);
+    return c.json({
+      success: true,
+      data: {
+        ...parsedData,
+        companyName: article.siteName || "",
+        location: null, // Bóc tách location thủ công rất khó, nên để user tự điền
+      }
+    }, 200);
+
+  } catch (error: any) {
+    return c.json({ success: false, message: "Lỗi khi tải trang: " + error.message }, 400);
+  }
+});
+
 
 // 2. Áp dụng middleware (Đảm bảo path khớp với route /create)
 jobRoute.use('/create', verifyRole('RECRUITER'));
-jobRoute.use('/update/:id', verifyRole('RECRUITER'));
-jobRoute.use('/delete/:id', verifyRole('RECRUITER'));
 jobRoute.openapi(createJobDoc, async (c) => {
   // 3. LẤY DỮ LIỆU TỪ 'jwtPayload'
   const payload = c.get('jwtPayload');
@@ -80,6 +165,7 @@ Hotline: ${body.hotline}
     return c.json({ success: false, message: error.message }, 400);
   }
 });
+jobRoute.use('/update/:id', verifyRole('RECRUITER'));
 jobRoute.openapi(updateJobDoc, async (c) => {
   const payload = c.get('jwtPayload');
   const { id } = c.req.valid('param');
@@ -114,6 +200,7 @@ jobRoute.openapi(updateJobDoc, async (c) => {
 });
 
 // --- API XÓA BÀI ĐĂNG ---
+jobRoute.use('/delete/:id', verifyRole('RECRUITER'));
 jobRoute.openapi(deleteJobDoc, async (c) => {
   const payload = c.get('jwtPayload');
   const { id } = c.req.valid('param');
@@ -212,6 +299,7 @@ jobRoute.openapi(getMyJobsDoc, async (c) => {
     return c.json({ success: false, message: error.message }, 400);
   }
 });
+
 jobRoute.use('/:id/save', verifyRole('CANDIDATE'));
 jobRoute.openapi(toggleSaveJobDoc, async (c) => {
   const payload = c.get('jwtPayload');
@@ -370,5 +458,6 @@ jobRoute.openapi(getSavedJobsDoc, async (c) => {
     return c.json({ success: false, message: error.message }, 400);
   }
 });
+
 
 export default jobRoute;
