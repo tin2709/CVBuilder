@@ -4,6 +4,7 @@ import { sign } from 'hono/jwt'; // Hono có sẵn thư viện hỗ trợ JWT
 import { prisma } from '../lib/db';
 import { transporter } from '../lib/mail';
 
+
 export const authService = {
   async register(userData: any) {
     const { email, password, name, role } = userData;

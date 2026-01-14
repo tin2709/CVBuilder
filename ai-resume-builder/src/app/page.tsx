@@ -1,7 +1,9 @@
 "use client";
 import { useState,useEffect } from "react"; // 1. Import useState
 import { useRouter } from "next/navigation"; // Thêm router để chuyển trang
-
+import { useReactiveStorage } from "@/hooks/use-reactive-storage";
+import { userStorage } from "@/lib/reactive-storage";
+import { authClientService } from "@/services/Client/auth-client.service"; 
 import Link from "next/link";
 import { 
   Search, 
@@ -29,6 +31,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"; // Giả định bạn có shadcn dropdown
 // Dữ liệu mẫu giống hệt trong file HTML tham khảo
+import { useTheme } from "@/providers/ThemeProvider"; // Import hook theme
+import { Sun, Moon } from "lucide-react"; // Import icon
 const TEMPLATES = [
   { 
     id: 1, 
@@ -98,24 +102,12 @@ const TEMPLATES = [
 
 export default function TemplatesPage() {
       const [viewingTemplate, setViewingTemplate] = useState<typeof TEMPLATES[0] | null>(null);
-  const [user, setUser] = useState<any>(null);
 const router = useRouter();
-  useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        console.error("Lỗi parse user:", e);
-      }
-    }
-  }, []);
+  const user = useReactiveStorage(userStorage); 
+  const { isDarkMode, toggleTheme } = useTheme(); // Lấy logic theme
 
   const handleLogout = () => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("user");
-    setUser(null);
-    router.push("/auth"); // Chuyển về trang auth (login)
+    authClientService.logout(); // Sử dụng logic tập trung trong service
   };
   return (
     <div className="flex flex-col min-h-screen bg-[#f6f7f8] text-slate-900 font-sans">
@@ -182,8 +174,19 @@ const router = useRouter();
               </Button>
             </Link>
           )}
-        </div>
 
+ <button
+            onClick={toggleTheme}
+            className="p-2 rounded-full hover:bg-slate-100 transition-colors"
+            title={isDarkMode ? "Chế độ sáng" : "Chế độ tối"}
+          >
+            {isDarkMode ? (
+              <Sun className="size-5 text-orange-500" />
+            ) : (
+              <Moon className="size-5 text-[#136dec]" />
+            )}
+          </button>
+        </div>
 
         {/* Mobile Menu Button */}
         <Button variant="ghost" size="icon" className="lg:hidden">

@@ -2,6 +2,7 @@
 import { client } from "@/lib/client";
 import { LoginPayload, RegisterPayload } from "@/lib/schema";
 import Cookies from 'js-cookie'; // Import thư viện cookie
+import { userStorage, tokenStorage } from "@/lib/reactive-storage"; // Thêm import
 
 export const authClientService = {
   async login(data: LoginPayload) {
@@ -17,9 +18,8 @@ export const authClientService = {
     // Xử lý lưu trữ khi đăng nhập thành công
     if (result.success && result.accessToken && result.user) {
       // 1. Lưu vào localStorage (Dành cho Client Component / Giao diện)
-      localStorage.setItem("accessToken", result.accessToken);
-      localStorage.setItem("user", JSON.stringify(result.user));
-
+tokenStorage.set(result.accessToken); 
+      userStorage.set(result.user);
       // 2. Lưu vào Cookie (Dành cho Next.js Middleware chặn route)
       // expires: 7 (Cookie hết hạn sau 7 ngày)
       // path: '/' (Cookie có hiệu lực trên toàn bộ trang web)
@@ -33,15 +33,15 @@ export const authClientService = {
   // Thêm hàm logout để xóa sạch dấu vết khi người dùng đăng xuất
   async logout() {
     // Xóa LocalStorage
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("user");
+    tokenStorage.remove();
+    userStorage.remove();
 
     // Xóa Cookies
     Cookies.remove("accessToken", { path: '/' });
     Cookies.remove("role", { path: '/' });
 
     // Điều hướng về trang login
-    window.location.href = '/auth/login';
+    window.location.href = '/auth';
   },
 
   async register(data: RegisterPayload) {

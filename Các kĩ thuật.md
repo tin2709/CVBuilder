@@ -330,3 +330,72 @@ Hệ thống tích hợp tính năng này vào Route `POST /api/jobs/import-link
 
 ---
 **Ghi chú:** Luôn luôn cung cấp giá trị mặc định cho các trường dữ liệu (`?? ""`) để đảm bảo tính ổn định của hệ thống TypeScript.
+
+Dưới đây là bản tóm tắt kỹ thuật **Reactive Storage** dùng để đồng bộ hóa dữ liệu (User, Token, Theme) giữa nhiều tab và cập nhật UI ngay lập tức, dành cho file README của bạn.
+
+---
+
+# 🔄 Kỹ thuật Reactive Storage - Đồng bộ dữ liệu đa tab (Next.js & React)
+
+## 1. Giới thiệu
+Kỹ thuật này được áp dụng để giải quyết vấn đề dữ liệu trong `localStorage` bị "lỗi thời" (stale) khi người dùng mở nhiều tab hoặc khi dữ liệu thay đổi mà React không nhận biết được để cập nhật giao diện. 
+
+Dựa trên kiến trúc của các dự án lớn như **Firecrawl**, hệ thống sử dụng lớp trừu tượng `BaseStorage` kết hợp với hook `useSyncExternalStore` của React 18.
+
+## 2. Tại sao cần Reactive Storage?
+*   **Mặc định của Trình duyệt**: Lệnh `localStorage.setItem()` không phát ra sự kiện thông báo cho chính tab đang thực hiện lệnh đó.
+*   **Hạn chế của React**: React không tự động Render lại (re-render) khi giá trị trong Storage thay đổi nếu không có State can thiệp.
+*   **Đồng bộ đa tab**: Giúp người dùng đăng xuất ở Tab 1 thì Tab 2 cũng tự động cập nhật về trạng thái chưa đăng nhập ngay lập tức.
+
+## 3. Kiến trúc thành phần
+
+### A. Lớp quản lý (LocalStorageManager)
+Đóng vai trò là "người quan sát" (Observable).
+*   **`subscribe`**: Đăng ký lắng nghe sự kiện `storage` (từ tab khác) và sự kiện `custom-event` (trong cùng tab).
+*   **`getSnapshot`**: Hàm lấy dữ liệu hiện tại từ Storage để cung cấp cho React.
+*   **`set/remove`**: Thực hiện ghi/xóa dữ liệu đồng thời phát đi một tín hiệu (Trigger) để báo cho các component cần cập nhật.
+
+### B. Hook tùy chỉnh (useReactiveStorage)
+Cầu nối giữa Storage và UI.
+*   Sử dụng `useSyncExternalStore` để đảm bảo UI luôn khớp với "nguồn dữ liệu thực" (Single Source of Truth) từ Storage.
+*   Xử lý **SSR Guard**: Kiểm tra `typeof window !== 'undefined'` để tránh lỗi "window is not defined" khi Next.js render phía server.
+
+## 4. Quy trình xử lý dữ liệu
+
+1.  **Ghi dữ liệu**: Khi gọi `userStorage.set(data)`, hệ thống lưu vào `localStorage` và phát một `CustomEvent`.
+2.  **Thông báo**: 
+    *   Các component trong **cùng tab** nhận tín hiệu từ `CustomEvent`.
+    *   Các component ở **tab khác** nhận tín hiệu từ sự kiện `storage` của trình duyệt.
+3.  **Cập nhật UI**: Hook `useSyncExternalStore` nhận thấy tín hiệu thay đổi, gọi `getSnapshot` và yêu cầu React vẽ lại giao diện với dữ liệu mới nhất.
+
+## 5. Mã nguồn triển khai tóm tắt
+
+```typescript
+// Quản lý việc đăng ký và phát tín hiệu
+export class LocalStorageManager {
+  subscribe = (callback) => {
+    window.addEventListener("storage", callback); // Tabs khác
+    window.addEventListener("local-update", callback); // Cùng tab
+    return () => { ... };
+  };
+  getSnapshot = () => localStorage.getItem(this.key);
+}
+
+// Hook sử dụng trong Component
+export function useReactiveStorage(manager) {
+  return useSyncExternalStore(manager.subscribe, manager.getSnapshot, () => null);
+}
+```
+
+## 6. Lợi ích vượt trội
+*   **Hiệu suất cao**: Tránh sử dụng quá nhiều `useEffect` và `useState` thủ công.
+*   **Trải nghiệm người dùng (UX)**: Giao diện cực kỳ mượt mà, đồng nhất về trạng thái đăng nhập và giao diện (Dark/Light mode) trên toàn bộ các tab trình duyệt.
+*   **Code sạch (Clean Code)**: Tách biệt hoàn toàn logic lưu trữ và logic hiển thị.
+
+## 7. Ứng dụng thực tế trong dự án
+*   **User Profile**: Cập nhật tên và avatar người dùng trên Navbar ngay khi Login/Logout.
+*   **Theme Switcher**: Đồng bộ chế độ Dark Mode (DarkReader) trên tất cả các tab đang mở.
+*   **Auth Token**: Tự động xử lý khi Token hết hạn hoặc bị xóa.
+
+---
+**Ghi chú:** Khi sử dụng với Next.js, luôn đảm bảo logic can thiệp vào DOM/Window chỉ chạy sau khi component đã **Mounted** ở phía Client.

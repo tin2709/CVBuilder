@@ -45,6 +45,7 @@
     "bullmq": "^5.66.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "darkreader": "^4.9.118",
     "dotenv": "^17.2.3",
     "hono": "^4.11.1",
     "ioredis": "^5.9.1",
