@@ -125,6 +125,10 @@ model Collaboration {
 // 3. Tin tuyển dụng
 model Job {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  documentId  String   // ID chung để nhóm các version (VD: "job_abc_123")
+  version     Int      @default(1)
+  isLive      Boolean  @default(false) // Chỉ 1 bản ghi duy nhất có isLive = true tại một thời điểm
   title       String
   companyName String?  // Tên công ty/nhà máy
   description String   // Mô tả chi tiết công việc
@@ -136,7 +140,7 @@ model Job {
   applyLink   String?   // Link đăng ký (bit.ly...)
   hotline     String?   // Hotline liên hệ
   
-  status      JobStatus @default(OPEN)
+  status      JobStatus @default(DRAFT)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime @updatedAt 
   questions   Question[]
@@ -149,22 +153,46 @@ model Job {
   categoryId  String?  @db.ObjectId
   category    Category? @relation(fields: [categoryId], references: [id])
   applications      Application[]
+    // Để tìm nhanh bản đang Live hoặc bản nháp mới nhất
+  @@index([documentId, isLive])
+  @@index([documentId, version])
+
 }
 // 4. Đơn ứng tuyển (Bảng nối giữa Job và Candidate)
 model Application {
   id           String   @id @default(auto()) @map("_id") @db.ObjectId
   jobId        String   @db.ObjectId
-  job          Job      @relation(fields: [jobId], references: [id])
+  job          Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  // --- LIÊN KẾT VỚI JOB ---
+  // Chúng ta dùng jobDocumentId thay vì jobId (ObjectId) để đơn ứng tuyển
+  // luôn đi theo bài gốc, bất kể nhà tuyển dụng có sửa bản nháp hay cập nhật version.
+  jobDocumentId String  
   
+  // --- LIÊN KẾT VỚI ỨNG VIÊN ---
   candidateId  String   @db.ObjectId
-  candidate    CandidateProfile @relation(fields: [candidateId], references: [id])
+  candidate    CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
-  status       AppStatus @default(PENDING)
+  // Snapshot: Lưu lại link CV tại thời điểm ứng tuyển.
+  // Lý do: Nếu sau này ứng viên sửa CV chính, nhà tuyển dụng vẫn thấy bản CV cũ họ đã nộp.
+  appliedCvUrl String?
+
+  // --- AI SCREENING DATA ---
+  aiStatus     AiStatus  @default(PENDING) // Trạng thái xử lý của BullMQ
   aiMatchScore Int?      // Điểm AI chấm (0-100)
-  aiAnalysis   String?   // Nhận xét của AI
-  appliedAt    DateTime  @default(now())
+  aiAnalysis   String?   // Nhận xét chi tiết của AI về điểm mạnh/yếu
   
+  // --- TRẠNG THÁI QUY TRÌNH ---
+  status       AppStatus @default(PENDING)
+  appliedAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Quan hệ 1-Nhiều với các buổi phỏng vấn (Vòng 1, Vòng 2...)
   interviews   Interview[]
+
+  // Index để truy vấn nhanh
+  @@index([jobDocumentId])
+  @@index([candidateId])
+  @@index([status])
 }
 
 // 5. Lịch phỏng vấn
@@ -313,11 +341,19 @@ enum Role {
 }
 
 enum JobStatus {
-  OPEN
-  CLOSED
-  DRAFT
+  DRAFT            // Bản nháp (chỉ Recruiter thấy)
+  PENDING_REVIEW   // Đang chờ quản lý/Admin duyệt
+  PUBLISHED        // Đã xuất bản (Ứng viên thấy)
+  REJECTED         // Bị từ chối (Sau khi Review)
+  CLOSED           // Đã đóng tin
+  ARCHIVED         // Lưu trữ (Bản cũ)
 }
-
+enum AiStatus {
+  PENDING      // Đang chờ đưa vào hàng đợi
+  PROCESSING   // BullMQ đang gửi cho AI xử lý
+  COMPLETED    // Đã có kết quả
+  FAILED       // Lỗi (API AI sập, CV lỗi...)
+}
 enum AppStatus {
   PENDING
   REVIEWING

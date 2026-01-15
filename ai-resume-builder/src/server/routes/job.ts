@@ -3,13 +3,18 @@ import { createJobDoc,updateJobDoc, deleteJobDoc,deleteManyJobsDoc,getMyJobsDoc,
   getJobsDoc, 
   getJobByIdDoc, 
   getSavedJobsDoc,
-  importJobFromLinkDoc 
+  importJobFromLinkDoc,
+  submitJobForReviewDoc,
+  approveJobDoc,
+  createNewJobVersionDoc,
+  getJobHistoryDoc
  } from '@/schemas/api-doc';
 import { prisma } from '@/lib/db';
 import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 import axios from 'axios';
 import { verifyRole } from '@/middlewares/auth.middleware';
+import { nanoid } from 'nanoid';
 
 // 1. Định nghĩa kiểu dữ liệu khớp với những gì Middleware lưu trữ
 type Variables = {
@@ -108,40 +113,23 @@ const parsedData = manualParseJob(
 // 2. Áp dụng middleware (Đảm bảo path khớp với route /create)
 jobRoute.use('/create', verifyRole('RECRUITER'));
 jobRoute.openapi(createJobDoc, async (c) => {
-  // 3. LẤY DỮ LIỆU TỪ 'jwtPayload'
   const payload = c.get('jwtPayload');
-
-  // 4. Kiểm tra an toàn trước khi lấy id
-  const recruiterId = payload?.id;
-
-  if (!recruiterId) {
-    return c.json({ 
-      success: false, 
-      message: 'Không tìm thấy thông tin định danh trong Token (thiếu id)' 
-    }, 401);
-  }
-
   const body = c.req.valid('json');
 
   try {
     const job = await prisma.job.create({
       data: {
-        title: body.title,
-        companyName: body.companyName,
-        description: body.description,
-        requirements: body.requirements,
-        location: body.location,
-        salaryRange: body.salaryRange,
+        ...body,
+        documentId: nanoid(), // Sinh ID định danh duy nhất cho chuỗi các version
+        version: 1,
+        status: 'DRAFT',      // Mặc định là nháp
+        isLive: false,        // Chưa công khai
+        recruiterId: payload.id,
         startDate: new Date(body.startDate),
         deadline: new Date(body.deadline),
-        applyLink: body.applyLink,
-        hotline: body.hotline,
-        recruiterId: recruiterId, // Gán ID lấy từ Token vào đây
       },
     });
-
-    // Tạo nội dung quảng cáo
-    const marketingText = `
+        const marketingText = `
 Mùa đông lạnh lẽo hão huyền
 Lạnh! Ừ thì lạnh, nhưng ${body.companyName} vẫn chờ!
 Chờ đợt TUYỂN DỤNG tháng ${new Date(body.deadline).getMonth() + 1}.
@@ -158,10 +146,116 @@ Hạn nộp hồ sơ: ${new Date(body.deadline).toLocaleDateString('vi-VN')}.
 Link đăng ký: ${body.applyLink}
 Hotline: ${body.hotline}
     `.trim();
-
-    return c.json({ success: true, data: job, marketingText }, 201);
+    return c.json({ 
+      success: true, 
+      data: job as any, 
+      marketingText // <--- THÊM DÒNG NÀY
+    }, 201);
   } catch (error: any) {
-    console.error("Prisma Error:", error);
+    return c.json({ success: false, message: error.message }, 400);
+  }
+});
+jobRoute.use('/:id/submit', verifyRole('RECRUITER'));
+jobRoute.openapi(submitJobForReviewDoc, async (c) => {
+  const { id } = c.req.valid('param');
+  await prisma.job.update({
+    where: { id },
+    data: { status: 'PENDING_REVIEW' }
+  });
+  return c.json({ success: true, message: "Đã gửi yêu cầu phê duyệt" }, 200);
+});
+jobRoute.use('/:id/approve', verifyRole('ADMIN'));
+jobRoute.openapi(approveJobDoc, async (c) => {
+  const { id } = c.req.valid('param');
+
+  const jobToApprove = await prisma.job.findUnique({ where: { id } });
+  if (!jobToApprove) return c.json({ success: false, message: "Không tìm thấy" }, 404);
+
+  // Sử dụng Transaction để đảm bảo tính nhất quán
+  const [oldLive, newLive] = await prisma.$transaction([
+    // Set tất cả bản cùng documentId đang live thành ARCHIVED
+    prisma.job.updateMany({
+      where: { documentId: jobToApprove.documentId, isLive: true },
+      data: { isLive: false, status: 'ARCHIVED' }
+    }),
+    // Set bản này thành PUBLISHED và isLive
+    prisma.job.update({
+      where: { id },
+      data: { status: 'PUBLISHED', isLive: true }
+    })
+  ]);
+
+  return c.json({ success: true, data: newLive as any }, 200);
+});
+// 3. Tạo Version mới để edit
+jobRoute.use('/:documentId/new-version', verifyRole('RECRUITER'));
+jobRoute.openapi(createNewJobVersionDoc, async (c) => {
+  const { documentId } = c.req.valid('param');
+  const body = c.req.valid('json'); // Dữ liệu người dùng muốn thay đổi ngay khi tạo version mới
+  const payload = c.get('jwtPayload');
+
+  try {
+    // 1. Tìm phiên bản mới nhất để copy
+    const latestJob = await prisma.job.findFirst({
+      where: { documentId, recruiterId: payload.id },
+      orderBy: { version: 'desc' }
+    });
+
+    if (!latestJob) return c.json({ success: false, message: "Không tìm thấy bài gốc" }, 404);
+
+    // 2. Tạo bản ghi mới (Clone và Overwrite)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id, createdAt, updatedAt, version, status, isLive, ...rest } = latestJob;
+
+    const newDraft = await prisma.job.create({
+      data: {
+        ...rest,       // Dữ liệu cũ
+        ...body,       // Dữ liệu mới gửi kèm (nếu có sẽ đè lên cái cũ)
+        version: latestJob.version + 1,
+        status: 'DRAFT',
+        isLive: false,
+        // Đảm bảo ép kiểu Date cho các trường thời gian nếu có trong body
+        startDate: body.startDate ? new Date(body.startDate) : latestJob.startDate,
+        deadline: body.deadline ? new Date(body.deadline) : latestJob.deadline,
+      }
+    });
+
+    return c.json({ 
+      success: true, 
+      data: newDraft as any, 
+      marketingText: `Đã tạo phiên bản ${newDraft.version} thành công.` 
+    }, 201);
+  } catch (error: any) {
+    return c.json({ success: false, message: error.message }, 400);
+  }
+});
+jobRoute.use('/document/:documentId/versions', verifyRole('RECRUITER'));
+jobRoute.openapi(getJobHistoryDoc, async (c) => {
+  const { documentId } = c.req.valid('param');
+  const payload = c.get('jwtPayload');
+
+  try {
+    // Lấy tất cả version, xếp cái mới nhất lên đầu
+    const versions = await prisma.job.findMany({
+      where: { 
+        documentId, 
+        // Bảo mật: Chỉ chủ sở hữu hoặc admin mới xem được lịch sử nháp
+        recruiterId: payload.role === 'ADMIN' ? undefined : payload.id 
+      },
+      orderBy: { version: 'desc' }
+    });
+
+    return c.json({
+      success: true,
+      data: versions.map(v => ({
+        ...v,
+        createdAt: v.createdAt.toISOString(),
+        updatedAt: v.updatedAt.toISOString(),
+        // Map thêm các trường cần thiết cho JobResponseSchema
+        marketingText: `Phiên bản số ${v.version} - Trạng thái: ${v.status}`
+      })) as any
+    }, 200);
+  } catch (error: any) {
     return c.json({ success: false, message: error.message }, 400);
   }
 });

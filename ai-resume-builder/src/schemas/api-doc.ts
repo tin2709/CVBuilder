@@ -369,7 +369,6 @@ export const deleteManyJobsDoc = createRoute({
     403: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Không có quyền' },
   },
 });
-// src/schemas/api-doc.ts
 
 export const importJobFromLinkDoc = createRoute({
   method: 'post',
@@ -407,6 +406,70 @@ export const importJobFromLinkDoc = createRoute({
     },
     400: { description: 'Lỗi trích xuất' }
   }
+});
+// 1. Gửi tin để chờ duyệt (DRAFT -> PENDING_REVIEW)
+export const submitJobForReviewDoc = createRoute({
+  method: 'patch',
+  path: '/{id}/submit',
+  tags: [TAG_JOBS],
+  summary: 'Gửi bài đăng để chờ phê duyệt',
+  request: { params: job.JobIdParamSchema },
+  responses: {
+    200: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Thành công' },
+    403: { description: 'Không có quyền' }
+  },
+});
+// 2. Admin/Manager phê duyệt tin (PENDING_REVIEW -> PUBLISHED)
+// Logic sẽ tự động set isLive = true và ARCHIVE bản cũ
+export const approveJobDoc = createRoute({
+  method: 'patch',
+  path: '/{id}/approve',
+  tags: ['Admin - Jobs Management'],
+  summary: 'Phê duyệt và Xuất bản bài đăng (Admin)',
+  request: { params: job.JobIdParamSchema },
+  responses: {
+    200: { content: { 'application/json': { schema: job.JobResponseSchema } }, description: 'Đã xuất bản' },
+    403: { description: 'Chỉ Admin mới có quyền' }
+  },
+});
+// 3. Tạo một phiên bản nháp mới từ bài đang chạy (Dành cho việc chỉnh sửa version)
+// src/schemas/api-doc.ts
+
+export const createNewJobVersionDoc = createRoute({
+  method: 'post',
+  path: '/{documentId}/new-version',
+  tags: [TAG_JOBS],
+  summary: 'Tạo một bản nháp mới từ phiên bản hiện tại (có thể kèm dữ liệu chỉnh sửa)',
+  request: { 
+    params: z.object({ documentId: z.string() }),
+    body: { content: { 'application/json': { schema: job.UpdateJobSchema.partial() } } } // Cho phép gửi thông tin muốn sửa
+  },
+  responses: {
+    201: { content: { 'application/json': { schema: job.JobResponseSchema } }, description: 'Bản nháp mới đã được tạo' },
+    404: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Không tìm thấy' },
+    400: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Lỗi dữ liệu' 
+    }
+  },
+});
+// 4. Lấy lịch sử các phiên bản của 1 bài đăng
+export const getJobHistoryDoc = createRoute({
+  method: 'get',
+  path: '/document/{documentId}/versions',
+  tags: [TAG_JOBS],
+  summary: 'Xem lịch sử các phiên bản của bài đăng',
+  request: { params: z.object({ documentId: z.string() }) },
+  responses: {
+    200: { 
+      content: { 'application/json': { schema: z.object({ success: z.boolean(), data: z.array(job.JobResponseSchema) }) } }, 
+      description: 'Thành công' 
+    },
+    400: { 
+      content: { 'application/json': { schema: job.ErrorResponseSchema } }, 
+      description: 'Lỗi dữ liệu' 
+    }
+  },
 });
 // --- Get My Jobs Doc ---
 export const getMyJobsDoc = createRoute({

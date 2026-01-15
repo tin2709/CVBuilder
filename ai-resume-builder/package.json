@@ -53,6 +53,7 @@
     "jsdom": "^27.4.0",
     "liquidjs": "^10.24.0",
     "lucide-react": "^0.561.0",
+    "nanoid": "^5.1.6",
     "next": "16.0.10",
     "nodemailer": "^7.0.12",
     "react": "19.2.1",
