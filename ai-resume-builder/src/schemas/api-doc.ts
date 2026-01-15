@@ -168,7 +168,51 @@ export const getCVHistoryDoc = createRoute({
     }
   },
 });
+// --- CV Layout & Blocks Docs ---
 
+// src/schemas/api-doc.ts
+
+// 1. Thêm mã lỗi cho API Tạo Block
+export const addCVBlockDoc = createRoute({
+  method: 'post',
+  path: '/me/blocks',
+  tags: [TAG_CANDIDATE],
+  summary: 'Thêm một khối nội dung mới',
+  request: { body: { content: { 'application/json': { schema: cand.CreateCVBlockSchema } } } },
+  responses: {
+    201: { content: { 'application/json': { schema: cand.CVBlockSchema } }, description: 'Thành công' },
+    400: { content: { 'application/json': { schema: auth.ErrorResponseSchema } }, description: 'Lỗi dữ liệu' },
+    404: { content: { 'application/json': { schema: auth.ErrorResponseSchema } }, description: 'Không thấy hồ sơ' },
+  },
+});
+
+// 2. Thêm mã lỗi cho API Cập nhật Block
+export const updateCVBlockDoc = createRoute({
+  method: 'put',
+  path: '/me/blocks/{id}',
+  tags: [TAG_CANDIDATE],
+  summary: 'Cập nhật khối nội dung',
+  request: { 
+    params: z.object({ id: z.string() }),
+    body: { content: { 'application/json': { schema: cand.CreateCVBlockSchema.partial() } } } 
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: cand.CVBlockSchema } }, description: 'Thành công' },
+    400: { content: { 'application/json': { schema: auth.ErrorResponseSchema } }, description: 'Lỗi yêu cầu' },
+    403: { content: { 'application/json': { schema: auth.ErrorResponseSchema } }, description: 'Không có quyền' },
+    404: { content: { 'application/json': { schema: auth.ErrorResponseSchema } }, description: 'Không tìm thấy khối' },
+  },
+});
+export const reorderLayoutDoc = createRoute({
+  method: 'patch',
+  path: '/me/reorder',
+  tags: [TAG_CANDIDATE],
+  summary: 'Sắp xếp lại thứ tự các khối trong CV (Kéo thả)',
+  request: { body: { content: { 'application/json': { schema: cand.ReorderLayoutSchema } } } },
+  responses: {
+    200: { description: 'Đã cập nhật thứ tự' },
+  },
+});
 // Xóa toàn bộ Profile (Bao gồm cả Exp, Edu, Project)
 export const deleteCandidateProfileDoc = createRoute({
   method: 'delete',

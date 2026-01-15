@@ -67,11 +67,29 @@ model CandidateProfile {
   workExperiences WorkExperience[]
   projects        PersonalProject[]
   educations      EducationRecord[]
-  
+  layout          CVBlock[]
   cvUrl       String?  
   applications Application[]
 }
+model CVBlock {
+  id               String           @id @default(auto()) @map("_id") @db.ObjectId
+  candidateProfileId String         @db.ObjectId
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
 
+  // Loại block: 
+  // 1. CORE_EXPERIENCE, CORE_EDUCATION, CORE_PROJECTS (Liên kết với các bảng cũ)
+  // 2. CUSTOM_TEXT, CUSTOM_LIST (Nội dung người dùng tự thêm)
+  type             String           
+  title            String           // Tiêu đề hiển thị trên CV
+  order            Int              // Thứ tự sắp xếp (1, 2, 3...)
+  
+  // Dữ liệu tùy chỉnh (Chỉ dùng cho các loại CUSTOM)
+  // Đối với loại CORE, trường này có thể để null vì dữ liệu đã nằm ở bảng riêng
+  customContent    Json?            
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  isVisible        Boolean          @default(true) // Có thể ẩn/hiện block mà không cần xóa
+}
 // Model cho Kinh nghiệm làm việc (như BitGroup trong CV)
 model WorkExperience {
   id               String   @id @default(auto()) @map("_id") @db.ObjectId

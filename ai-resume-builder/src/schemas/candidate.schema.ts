@@ -193,3 +193,23 @@ export const CandidateProfileFullResponseSchema = z.object({
   success: z.boolean(),
   data: CandidateProfileFullSchema
 }).openapi('CandidateProfileFullResponse');
+// Schema cho một Block
+export const CVBlockSchema = z.object({
+  id: z.string(),
+  type: z.string().openapi({ example: 'CUSTOM_TEXT' }),
+  title: z.string().openapi({ example: 'Giải thưởng & Thành tích' }),
+  order: z.number().openapi({ example: 1 }),
+  isVisible: z.boolean().default(true).optional().openapi({ example: true }), 
+  customContent: z.any().nullable(),
+}).openapi('CVBlock');
+
+// Schema tạo mới Block
+export const CreateCVBlockSchema = CVBlockSchema.omit({ id: true });
+
+// Schema sắp xếp lại thứ tự
+export const ReorderLayoutSchema = z.object({
+  orders: z.array(z.object({
+    id: z.string(),
+    order: z.number()
+  }))
+}).openapi('ReorderLayoutRequest');

@@ -267,6 +267,101 @@ candidateRoute.openapi(doc.publishCVDoc, async (c) => {
     return c.json({ success: false, message: error.message }, 400);
   }
 });
+candidateRoute.use('/me/blocks', verifyRole("CANDIDATE"));
+candidateRoute.openapi(doc.addCVBlockDoc, async (c) => {
+  const userId = getSafeUserId(c);
+  const body = c.req.valid('json');
+
+  const profile = await prisma.candidateProfile.findFirst({
+    where: { userId, isMaster: true }
+  });
+
+  if (!profile) return c.json({ success: false, message: "Profile not found" }, 404);
+
+  const newBlock = await prisma.cVBlock.create({
+    data: {
+      ...body,
+      candidateProfileId: profile.id
+    }
+  });
+
+  return c.json(newBlock, 201);
+});
+candidateRoute.use('/me/blocks/:id', verifyRole("CANDIDATE"));
+candidateRoute.openapi(doc.updateCVBlockDoc, async (c) => {
+  const { id } = c.req.valid('param'); // Lấy ID của Block từ URL
+  const body = c.req.valid('json');    // Lấy dữ liệu cần sửa từ Body
+  const userId = getSafeUserId(c);
+
+  try {
+    // 1. Tìm block và kiểm tra quyền sở hữu (Bảo mật)
+    const block = await prisma.cVBlock.findUnique({
+      where: { id },
+      include: { 
+        candidateProfile: {
+          select: { userId: true }
+        } 
+      }
+    });
+
+    if (!block) {
+      return c.json({ success: false, message: "Không tìm thấy khối nội dung này" }, 404);
+    }
+
+    // Kiểm tra xem block này có thuộc về User đang đăng nhập không
+    if (block.candidateProfile.userId !== userId) {
+      return c.json({ success: false, message: "Bạn không có quyền chỉnh sửa khối này" }, 403);
+    }
+
+    // 2. Thực hiện cập nhật
+    const updatedBlock = await prisma.cVBlock.update({
+      where: { id },
+      data: {
+        title: body.title,
+        order: body.order,
+        isVisible: body.isVisible,
+        customContent: body.customContent,
+        // Lưu ý: type thường không nên cho phép sửa sau khi tạo 
+        // để tránh làm hỏng logic render ở Frontend.
+      }
+    });
+
+    // 3. Trả về kết quả (đảm bảo đúng schema đã định nghĩa ở Doc)
+    return c.json({
+      id: updatedBlock.id,
+      type: updatedBlock.type,
+      title: updatedBlock.title,
+      order: updatedBlock.order,
+      isVisible: updatedBlock.isVisible,
+      customContent: updatedBlock.customContent,
+    }, 200);
+
+  } catch (error: any) {
+    console.error("Update CV Block Error:", error);
+    return c.json({ success: false, message: error.message }, 400);
+  }
+});
+candidateRoute.use('/me/reorder', verifyRole("CANDIDATE"));
+candidateRoute.openapi(doc.reorderLayoutDoc, async (c) => {
+  const userId = getSafeUserId(c);
+  const { orders } = c.req.valid('json');
+
+  const profile = await prisma.candidateProfile.findFirst({
+    where: { userId, isMaster: true }
+  });
+
+  // Sử dụng Transaction để đảm bảo tất cả đều được cập nhật hoặc không cái nào cả
+  await prisma.$transaction(
+    orders.map((item) =>
+      prisma.cVBlock.update({
+        where: { id: item.id, candidateProfileId: profile!.id },
+        data: { order: item.order }
+      })
+    )
+  );
+
+  return c.json({ success: true, message: "Layout updated" }, 200);
+});
 // --- CẬP NHẬT HỒ SƠ ---
 candidateRoute.use('/me/update', verifyRole("CANDIDATE"));
 
