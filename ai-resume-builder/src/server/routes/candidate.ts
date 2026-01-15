@@ -5,6 +5,7 @@ import { verifyRole } from '@/middlewares/auth.middleware';
 import * as doc from '@/schemas/api-doc';
 import { prisma } from '@/lib/db';
 import * as crypto from 'crypto';
+import { nanoid } from 'nanoid';
 
 // 1. Định nghĩa Type cho Context Variables
 type Variables = {
@@ -40,6 +41,21 @@ async function getProfileId(userId: string) {
   if (!profile) throw new Error("Profile not found. Please create a profile first.");
   return profile.id;
 }
+const mapToFullSchema = (p: any) => ({
+  ...p,
+  createdAt: p.createdAt?.toISOString(),
+  updatedAt: p.updatedAt?.toISOString(),
+  // Đảm bảo các mảng quan hệ luôn tồn tại để không lỗi Schema
+  workExperiences: p.workExperiences || [],
+  projects: p.projects || [],
+  educations: p.educations || [],
+  user: {
+    name: p.user?.name || "",
+    email: p.user?.email || "",
+    role: p.user?.role || "CANDIDATE"
+  }
+});
+
 
 // ==========================================
 // 1. SEARCH API (Dành cho RECRUITER - Đặt trên cùng)
@@ -111,7 +127,48 @@ candidateRoute.openapi(doc.getMyProfileDoc, async (c) => {
     return c.json({ success: false, message: e.message }, 401);
   }
 });
+candidateRoute.use('/me/versions', verifyRole("CANDIDATE"));
+candidateRoute.openapi(doc.getCVHistoryDoc, async (c) => {
+  try {
+    const userId = getSafeUserId(c);
 
+    // 1. Tìm tất cả các bản ghi Profile của User này
+    // Sắp xếp theo phiên bản mới nhất lên đầu
+    const profiles = await prisma.candidateProfile.findMany({
+      where: { userId },
+      include: {
+        user: { select: { name: true, email: true, role: true } },
+        workExperiences: { orderBy: { startDate: 'desc' } },
+        projects: { orderBy: { startDate: 'desc' } },
+        educations: { orderBy: { startDate: 'desc' } }
+      },
+      orderBy: { version: 'desc' }
+    });
+
+    // 2. Nếu không có profile nào
+    if (profiles.length === 0) {
+      return c.json({
+        success: true,
+        data: []
+      }, 200);
+    }
+
+    // 3. Chuẩn hóa dữ liệu mảng trả về bằng helper mapToFullSchema
+    const formattedData = profiles.map(p => mapToFullSchema(p));
+
+    return c.json({
+      success: true,
+      data: formattedData
+    }, 200);
+
+  } catch (error: any) {
+    console.error("Get CV History Error:", error);
+    return c.json({ 
+      success: false, 
+      message: error.message 
+    }, 400);
+  }
+});
 // --- TẠO HỒ SƠ ---
 candidateRoute.use('/me/create-profile', verifyRole("CANDIDATE"));
 candidateRoute.openapi(doc.createCandidateProfileDoc, async (c) => {
@@ -119,41 +176,97 @@ candidateRoute.openapi(doc.createCandidateProfileDoc, async (c) => {
     const userId = getSafeUserId(c);
     const data = c.req.valid('json');
 
-    const existing = await prisma.candidateProfile.findUnique({ where: { userId } });
-    if (existing) return c.json({ message: "Profile already exists" }, 400);
+    // 1. Kiểm tra xem đã có bản Master chưa
+    const existingMaster = await prisma.candidateProfile.findFirst({
+      where: { userId, isMaster: true }
+    });
+    if (existingMaster) return c.json({ message: "Hồ sơ chính đã tồn tại" }, 400);
 
-    // Lọc bỏ shareToken ra khỏi data để tránh gửi chuỗi rỗng hoặc null gây lỗi Unique
-    const { shareToken, ...restData } = data as any;
-
+    // 2. Tạo Profile mới (Master)
     const profile = await prisma.candidateProfile.create({
       data: {
-        ...restData,
+        ...data,
         userId,
-        // Đảm bảo shareToken không bị gán chuỗi rỗng "" 
-        // Nếu schema cho phép null, hãy để Prisma tự xử lý hoặc gán undefined
-        shareToken: undefined 
+        isMaster: true,
+        version: 1,
+        documentId: nanoid(),
+        status: 'DRAFT',
+        // Gán token ngẫu nhiên để tránh lỗi Unique Null của MongoDB
+        shareToken: crypto.randomBytes(16).toString('hex'),
+      },
+      include: {
+        user: { select: { name: true, email: true, role: true } },
+        workExperiences: true,
+        projects: true,
+        educations: true
       }
     });
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    
-    // Lưu vào Redis
+    // 3. Cập nhật Redis Search
     await redis.call('JSON.SET', `candidate:${profile.id}`, '$', JSON.stringify({
       id: profile.id,
-      name: user?.name ?? '',
-      headline: profile.headline ?? '',
+      name: profile.user.name,
+      headline: profile.headline,
       skills: profile.skills,
-      summary: profile.summary ?? ''
+      summary: profile.summary
     }));
 
-    return c.json({ success: true, data: profile as any }, 201);
+    // Trả về đúng object Profile như Doc yêu cầu
+    return c.json(mapToFullSchema(profile), 201);
+
   } catch (error: any) {
-    // Nếu vẫn lỗi P2002, có thể do bản ghi cũ trong DB. Hãy xóa trắng DB để test lại.
-    console.error("Prisma Error:", error);
+    console.error(error);
     return c.json({ success: false, message: error.message }, 500);
   }
-});
+})
+candidateRoute.use('/me/publish', verifyRole("CANDIDATE"));
+candidateRoute.openapi(doc.publishCVDoc, async (c) => {
+  try {
+    const userId = getSafeUserId(c);
 
+    const masterProfile = await prisma.candidateProfile.findFirst({
+      where: { userId, isMaster: true },
+      include: {
+        user: { select: { name: true, email: true, role: true } },
+        workExperiences: true,
+        projects: true,
+        educations: true
+      }
+    });
+
+    if (!masterProfile) {
+      // SỬA: Phải có success: false để khớp với ErrorResponseSchema
+      return c.json({ success: false, message: "Không tìm thấy hồ sơ chính" }, 404);
+    }
+
+    const updated = await prisma.candidateProfile.update({
+      where: { id: masterProfile.id },
+      data: { status: 'PUBLISHED' },
+      include: {
+        user: { select: { name: true, email: true, role: true } },
+        workExperiences: true,
+        projects: true,
+        educations: true
+      }
+    });
+
+    // Đồng bộ Redis...
+    await redis.call('JSON.SET', `candidate:${updated.id}`, '$', JSON.stringify({
+      id: updated.id,
+      name: updated.user.name,
+      headline: updated.headline,
+      skills: updated.skills,
+      summary: updated.summary
+    }));
+
+    // Trả về đúng schema cho mã 200
+    return c.json(mapToFullSchema(updated), 200);
+
+  } catch (error: any) {
+    // SỬA: Trả về đúng schema cho mã 400
+    return c.json({ success: false, message: error.message }, 400);
+  }
+});
 // --- CẬP NHẬT HỒ SƠ ---
 candidateRoute.use('/me/update', verifyRole("CANDIDATE"));
 

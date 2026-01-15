@@ -40,7 +40,11 @@ model CandidateProfile {
   userId      String   @unique @db.ObjectId // Nên là unique
   user        User     @relation(fields: [userId], references: [id])
     yDoc        Bytes?   
-  
+    // --- VERSIONING ---
+   documentId  String   // ID định danh chung (VD: "cv_user_123")
+  version     Int      @default(1)
+  isMaster    Boolean  @default(false) // Bản chính dùng để hiển thị ở trang "Sửa hồ sơ"
+  status      JobStatus @default(DRAFT) // Dùng chung Enum DRAFT/PUBLISHED
   // Quản lý quyền truy cập
   sharingMode SharingMode @default(PRIVATE)
   shareToken  String?     @unique // Token ngẫu nhiên cho link chia sẻ (vd: docs.com/cv/abc-123)
@@ -171,7 +175,10 @@ model Application {
   // --- LIÊN KẾT VỚI ỨNG VIÊN ---
   candidateId  String   @db.ObjectId
   candidate    CandidateProfile @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-
+  // Lưu toàn bộ nội dung CV tại thời điểm nộp dưới dạng JSON
+  // Bao gồm cả WorkExperience, Projects, Education.
+  // Nhà tuyển dụng sẽ xem dữ liệu từ trường này thay vì tìm ở bảng Profile.
+  cvSnapshot   Json? 
   // Snapshot: Lưu lại link CV tại thời điểm ứng tuyển.
   // Lý do: Nếu sau này ứng viên sửa CV chính, nhà tuyển dụng vẫn thấy bản CV cũ họ đã nộp.
   appliedCvUrl String?

@@ -113,6 +113,62 @@ export const createCandidateProfileDoc = createRoute({
     401: { description: 'Chưa đăng nhập' }
   },
 });
+// --- CV Versioning & Snapshot Docs ---
+
+// 1. Công khai hồ sơ (DRAFT -> PUBLISHED)
+
+export const publishCVDoc = createRoute({
+  method: 'patch',
+  path: '/me/publish',
+  tags: [TAG_CANDIDATE],
+  summary: 'Đặt hồ sơ hiện tại thành bản chính thức (Published)',
+  responses: {
+    200: { 
+      content: { 'application/json': { schema: cand.CandidateProfileFullSchema } }, 
+      description: 'Thành công' 
+    },
+    // BẮT BUỘC THÊM CÁC DÒNG NÀY:
+    404: { 
+      content: { 'application/json': { schema: auth.ErrorResponseSchema } }, 
+      description: 'Không tìm thấy hồ sơ' 
+    },
+    400: { 
+      content: { 'application/json': { schema: auth.ErrorResponseSchema } }, 
+      description: 'Lỗi yêu cầu' 
+    }
+  },
+});
+
+// 2. Lấy lịch sử các bản CV
+
+export const getCVHistoryDoc = createRoute({
+  method: 'get',
+  path: '/me/versions',
+  tags: [TAG_CANDIDATE],
+  summary: 'Xem lịch sử các phiên bản CV đã lưu',
+  responses: {
+    200: { 
+      content: { 
+        'application/json': { 
+          schema: z.object({ 
+            success: z.boolean(), 
+            data: z.array(cand.CandidateProfileFullSchema) 
+          }) 
+        } 
+      }, 
+      description: 'Thành công' 
+    },
+    401: { 
+      content: { 'application/json': { schema: auth.ErrorResponseSchema } }, 
+      description: 'Chưa đăng nhập' 
+    },
+    400: { 
+      content: { 'application/json': { schema: auth.ErrorResponseSchema } }, 
+      description: 'Lỗi yêu cầu' 
+    }
+  },
+});
+
 // Xóa toàn bộ Profile (Bao gồm cả Exp, Edu, Project)
 export const deleteCandidateProfileDoc = createRoute({
   method: 'delete',
@@ -816,9 +872,6 @@ export const applyJobDoc = createRoute({
 });
 
 // 2. Lấy danh sách đơn (Recruiter lấy theo Job, Candidate lấy của chính mình)
-// src/schemas/api-doc.ts
-
-// src/schemas/api-doc.ts
 
 export const getApplicationsDoc = createRoute({
   method: 'get',
@@ -839,6 +892,41 @@ export const getApplicationsDoc = createRoute({
   },
 });
 
+export const getApplicationDetailDoc = createRoute({
+  method: 'get',
+  path: '/{id}',
+  tags: ['Applications'],
+  summary: 'Xem chi tiết đơn ứng tuyển (Dành cho Recruiter)',
+  request: { 
+    params: z.object({ id: z.string().openapi({ example: '674d35629...' }) }) 
+  },
+  responses: {
+    200: { 
+      content: { 
+        'application/json': { 
+          schema: z.object({
+            success: z.boolean(),
+            data: z.object({
+              id: z.string(),
+              jobTitle: z.string(),
+              status: z.string(),
+              aiMatchScore: z.number().nullable(),
+              aiAnalysis: z.string().nullable(),
+              appliedAt: z.string(),
+              // Đây là dữ liệu CV "đóng băng"
+              cvSnapshot: z.any(), 
+              // Thông tin ứng viên hiện tại (để lấy avatar/contact mới nhất nếu cần)
+              candidateInfo: z.any()
+            })
+          }) 
+        } 
+      }, 
+      description: 'Thành công' 
+    },
+    403: { description: 'Không có quyền truy cập đơn này' },
+    404: { description: 'Không tìm thấy đơn ứng tuyển' }
+  },
+});
 // 3. Cập nhật trạng thái (Dành cho Recruiter)
 export const updateAppStatusDoc = createRoute({
   method: 'patch',
@@ -887,6 +975,22 @@ export const bulkDeleteApplicationsDoc = createRoute({
   responses: {
     200: { description: 'Thành công' },
     400: { description: 'Lỗi dữ liệu' }
+  },
+});
+// 3. Xem bản Snapshot CV của một đơn ứng tuyển cụ thể
+// Dùng cho cả Nhà tuyển dụng (xem hồ sơ nộp) và Ứng viên (xem lại mình đã nộp gì)
+export const getApplicationCVSnapshotDoc = createRoute({
+  method: 'get',
+  path: '/{id}/cv-snapshot',
+  tags: [TAG_APP],
+  summary: 'Lấy dữ liệu CV tại thời điểm ứng tuyển (Snapshot)',
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    200: { 
+      content: { 'application/json': { schema: z.object({ success: z.boolean(), data: z.any() }) } }, 
+      description: 'Dữ liệu CV Snapshot' 
+    },
+    404: { description: 'Không tìm thấy đơn hoặc snapshot' }
   },
 });
 const TAG_REVIEWS = 'Company Reviews';
