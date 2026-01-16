@@ -1051,24 +1051,60 @@ export const getCompanyReviewsDoc = createRoute({
   },
 });
 
-// 2. Gửi review mới
+// --- 2. API Tạo Review (Sửa lại để nhận đủ mã lỗi) ---
 export const postReviewDoc = createRoute({
   method: 'post',
   path: '/{companyId}/create',
   tags: [TAG_REVIEWS],
-  summary: 'Ứng viên gửi đánh giá mới',
+  summary: 'Ứng viên gửi đánh giá mới (Ẩn danh)',
   request: { 
     params: review.CompanyIdParamSchema,
     body: { content: { 'application/json': { schema: review.CreateReviewSchema } } } 
   },
   responses: {
-    201: { content: { 'application/json': { schema: review.ErrorResponseSchema } }, description: 'Thành công' },
-    400: { content: { 'application/json': { schema: review.ErrorResponseSchema } }, description: 'Đã review' },
-    403: { content: { 'application/json': { schema: review.ErrorResponseSchema } }, description: 'Không có quyền (Chỉ Candidate)' }, // THÊM DÒNG NÀY
+    201: { 
+      content: { 'application/json': { schema: review.ErrorResponseSchema } }, 
+      description: 'Thành công' 
+    },
+    400: { 
+      content: { 'application/json': { schema: review.ErrorResponseSchema } }, 
+      description: 'Đã review hoặc dữ liệu sai' 
+    },
+    403: { 
+      content: { 'application/json': { schema: review.ErrorResponseSchema } }, 
+      description: 'Không có quyền' 
+    },
+    // BẮT BUỘC THÊM DÒNG NÀY ĐỂ HẾT LỖI
+    500: { 
+      content: { 'application/json': { schema: review.ErrorResponseSchema } }, 
+      description: 'Lỗi server' 
+    },
   },
 });
 
-// 2. Update Review Doc
+// --- 3. API Lấy Review của tôi (Thêm mới) ---
+export const getMyReviewsDoc = createRoute({
+  method: 'get',
+  path: '/me/all',
+  tags: [TAG_REVIEWS],
+  summary: 'Lấy lịch sử đánh giá ẩn danh của chính tôi',
+  responses: {
+    200: { 
+      content: { 
+        'application/json': { 
+          schema: z.object({
+            success: z.boolean(),
+            data: z.array(z.any()) // Bạn có thể định nghĩa schema chi tiết hơn ở đây
+          }) 
+        } 
+      }, 
+      description: 'Thành công' 
+    },
+    401: { description: 'Chưa đăng nhập' }
+  },
+});
+
+// 4. Update Review Doc
 export const updateReviewDoc = createRoute({
   method: 'put',
   path: '/{id}/update',
@@ -1085,7 +1121,7 @@ export const updateReviewDoc = createRoute({
   },
 });
 
-// 3. Delete Review Doc
+// 5. Delete Review Doc
 export const deleteReviewDoc = createRoute({
   method: 'delete',
   path: '/{id}/delete',
@@ -1098,7 +1134,7 @@ export const deleteReviewDoc = createRoute({
     404: { content: { 'application/json': { schema: review.ErrorResponseSchema } }, description: 'Không tìm thấy review' }, // THÊM DÒNG NÀY
   },
 });
-// 5. Lấy điểm trung bình
+// 6. Lấy điểm trung bình
 export const getCompanyRatingDoc = createRoute({
   method: 'get',
   path: '/{companyId}/rating',

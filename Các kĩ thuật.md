@@ -399,3 +399,68 @@ export function useReactiveStorage(manager) {
 
 ---
 **Ghi chú:** Khi sử dụng với Next.js, luôn đảm bảo logic can thiệp vào DOM/Window chỉ chạy sau khi component đã **Mounted** ở phía Client.
+Dưới đây là bản tóm tắt kỹ thuật về hai tính năng bảo mật quan trọng nhất trong hệ thống của bạn, được trình bày dưới dạng file `README.md` chuyên nghiệp.
+
+---
+
+# 🛡️ Kiến trúc Bảo mật & Quyền riêng tư (Privacy-First Architecture)
+
+Tài liệu này giải quyết hai vấn đề nhạy cảm nhất trong nền tảng tuyển dụng: **Theo dõi hành vi ứng viên** và **Nỗi sợ bị trả đũa khi đánh giá công ty**. Hệ thống sử dụng các kỹ thuật mã hóa hiện đại để đảm bảo ngay cả quản trị viên (Admin) cũng không thể truy ngược danh tính người dùng.
+
+---
+
+## 1. Phân tích Lượt xem Ẩn danh (Privacy-First Job Analytics)
+
+Thay vì dùng Cookie hoặc ID người dùng để đếm lượt xem (vốn tạo ra dấu vết số), hệ thống sử dụng cơ chế **"Mã vân tay tạm thời"**.
+
+### ⚙️ Cơ chế hoạt động
+Mỗi lượt xem được định danh bằng một mã Hash duy nhất trong ngày:
+`VisitorHash = SHA256(IP + UserAgent + DailySalt)`
+
+*   **Daily Salt:** Một chuỗi bí mật thay đổi mỗi ngày. 
+    *   *Lợi ích:* Mã Hash của cùng một người vào hôm qua và hôm nay sẽ khác nhau hoàn toàn. Điều này ngăn chặn việc theo dõi hành vi ứng viên xuyên suốt nhiều ngày.
+*   **Redis HyperLogLog (PFADD):**
+    *   Sử dụng thuật toán xác suất để đếm "Unique Visitors".
+    *   **Tiết kiệm tài nguyên:** Chỉ tốn tối đa **12KB** RAM cho mỗi tin tuyển dụng, bất kể có hàng triệu lượt xem.
+    *   **Tính ẩn danh:** HyperLogLog chỉ lưu các bit trạng thái, không lưu dữ liệu đầu vào (Hash), khiến việc rò rỉ dữ liệu trở nên vô hại.
+
+### 🌟 Kết quả
+*   Đếm chính xác lượt xem duy nhất (không bị ảo bởi F5).
+*   Không cần bảng thông báo Cookie (Cookie Banners).
+*   Tuân thủ tuyệt đối chuẩn bảo mật GDPR.
+
+---
+
+## 2. Đánh giá Công ty Ẩn danh thực thụ (Truly Anonymous Reviews)
+
+Tính năng này cho phép ứng viên viết đánh giá về công ty cũ mà không lo bị "truy tìm" danh tính, nhờ việc cắt đứt mọi liên kết vật lý với bảng người dùng trong Database.
+
+### ⚙️ Cơ chế hoạt động
+Trong bảng `Review`, chúng ta tuyệt đối **không lưu `userId`**. Thay vào đó, hệ thống lưu trữ 2 mã băm (Hash) dựa trên **Permanent Salt** (Salt cố định):
+
+1.  **`authorHash` (Unique):** `Hash(userId + companyId + Salt)`
+    *   *Mục đích:* Đảm bảo mỗi người chỉ được đánh giá một công ty duy nhất 1 lần. Nếu nộp bài thứ 2, Database sẽ chặn do trùng mã Hash.
+2.  **`userReviewKey` (Index):** `Hash(userId + Salt)`
+    *   *Mục đích:* Giúp ứng viên xem lại lịch sử các bài đánh giá của chính mình mà không cần liên kết trực tiếp với tài khoản cá nhân.
+
+### 🛡️ Cách kiểm tra Quyền sở hữu (Sửa/Xóa)
+Vì Database không biết ai là chủ bài viết, khi người dùng muốn Sửa hoặc Xóa, hệ thống sẽ:
+1.  Lấy `userId` từ JWT Token của người đang đăng nhập.
+2.  Thực hiện băm `userId` đó với Salt để tạo ra mã Hash tạm thời.
+3.  So sánh mã Hash vừa tạo với `userReviewKey` trong Database. Nếu khớp, quyền chỉnh sửa sẽ được cấp.
+
+### 🌟 Kết quả
+*   **Leak-Proof:** Nếu Database bị rò rỉ, Hacker (hoặc Admin) cũng không thể biết tác giả bài viết là ai vì không có ID người dùng để thực hiện lệnh `Join`.
+*   **Chống Spam:** Vẫn giữ được sự chặt chẽ của hệ thống (mỗi người 1 bài) mà không cần định danh.
+*   **Lòng tin ứng viên:** Tạo môi trường an toàn để chia sẻ sự thật về môi trường làm việc.
+
+---
+
+## 🚀 Tổng kết Kỹ thuật
+
+| Tính năng | Kỹ thuật chủ chốt | Loại Salt | Lưu trữ |
+| :--- | :--- | :--- | :--- |
+| **Thống kê View** | SHA256 + PFADD | Thay đổi theo ngày | Redis (12KB) |
+| **Review Công ty** | Double Hashing | Cố định (Permanent) | MongoDB (JSON) |
+
+**Lưu ý quan trọng:** Để hệ thống an toàn, chuỗi `ANALYTICS_SECRET` và `REVIEW_SALT` trong file `.env` phải được bảo vệ tuyệt đối và không được thay đổi sau khi hệ thống đã đi vào vận hành chính thức.

@@ -30,7 +30,6 @@ model User {
   savedJobIds       String[]          @db.ObjectId
   savedJobs         Job[]             @relation("UserSavedJobs", fields: [savedJobIds], references: [id])
 
-  reviews           Review[]
   notifications     Notification[]
 }
 
@@ -147,7 +146,7 @@ model Collaboration {
 // 3. Tin tuyển dụng
 model Job {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  
+  viewCount    Int      @default(0)
   documentId  String   // ID chung để nhóm các version (VD: "job_abc_123")
   version     Int      @default(1)
   isLive      Boolean  @default(false) // Chỉ 1 bản ghi duy nhất có isLive = true tại một thời điểm
@@ -285,22 +284,22 @@ model Company {
 
 // Model Đánh giá công ty
 model Review {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  content     String
-  rating      Int
-  
-  // --- FIX LỖI 4: Quan hệ Review - User ---
-  userId      String   @db.ObjectId
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  content         String
+  rating          Int
+  companyId       String   @db.ObjectId
+  company         Company  @relation(fields: [companyId], references: [id])
 
-  // --- FIX LỖI 5: Quan hệ Review - Company ---
-  companyId   String   @db.ObjectId
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // 1. Chống spam: 1 người - 1 công ty - 1 review
+  authorHash      String   @unique 
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  // 2. Để lấy danh sách "My Reviews": 1 người - 1 key cố định
+  userReviewKey   String   
 
-  @@unique([userId, companyId])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userReviewKey]) // Index để truy vấn "My Reviews" cực nhanh
 }
 model Category {
   id        String   @id @default(auto()) @map("_id") @db.ObjectId

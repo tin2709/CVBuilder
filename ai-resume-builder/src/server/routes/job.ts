@@ -9,12 +9,13 @@ import { createJobDoc,updateJobDoc, deleteJobDoc,deleteManyJobsDoc,getMyJobsDoc,
   createNewJobVersionDoc,
   getJobHistoryDoc
  } from '@/schemas/api-doc';
-import { prisma } from '@/lib/db';
+import { prisma,redis } from '@/lib/db';
 import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 import axios from 'axios';
 import { verifyRole } from '@/middlewares/auth.middleware';
 import { nanoid } from 'nanoid';
+import { getDailyVisitorHash } from '@/lib/Hash/analystics';
 
 // 1. Định nghĩa kiểu dữ liệu khớp với những gì Middleware lưu trữ
 type Variables = {
@@ -485,21 +486,59 @@ jobRoute.openapi(getJobsDoc, async (c) => {
 jobRoute.use('/:id', verifyRole('CANDIDATE'));
 jobRoute.openapi(getJobByIdDoc, async (c) => {
   const { id } = c.req.valid('param');
-  const payload = c.get('jwtPayload');
+  const payload = c.get('jwtPayload'); // Có thể null nếu ứng viên xem tin mà chưa login
 
+  // 1. LẤY THÔNG TIN ĐỊNH DANH (ẨN DANH)
+  // Lấy IP (hỗ trợ cả trường hợp chạy qua Proxy/Cloudflare)
+  const forwarded = c.req.header('x-forwarded-for');
+  const ip = forwarded ? forwarded.split(',')[0] : '127.0.0.1';
+  const ua = c.req.header('user-agent') || 'unknown';
+  
   try {
+    // 2. LOGIC ĐẾM LƯỢT XEM (NON-COOKIE ANALYTICS)
+    const visitorHash = getDailyVisitorHash(ip, ua);
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const redisKey = `job:pfviews:${id}:${dateStr}`;
+
+      // 2. PFADD (Lấy kết quả)
+    const isNewVisitor = await redis.pfadd(redisKey, visitorHash);
+
+    // --- DEBUG LOGS (Xem ở Terminal VS Code) ---
+    console.log("----------------------------");
+    console.log("HÀNH ĐỘNG: Xem chi tiết Job");
+    console.log("IP:", ip);
+    console.log("User-Agent:", ua);
+    console.log("Mã Hash tạo ra:", visitorHash);
+    console.log("Đây có phải người mới không?", isNewVisitor === 1 ? "ĐÚNG" : "SAI (Đã xem rồi)");
+
+    if (isNewVisitor === 1) {
+      // 3. Dùng AWAIT ở đây để DB cập nhật xong mới chạy tiếp (Chỉ để test)
+      await prisma.job.update({
+        where: { id },
+        data: { viewCount: { increment: 1 } }
+      });
+      console.log("✅ Đã cập nhật +1 View vào Database");
+      await redis.expire(redisKey, 172800);
+    }
+
+    // 3. TRUY VẤN DỮ LIỆU JOB
     const job = await prisma.job.findUnique({
       where: { id },
       include: {
-        company: true,
-        category: true,
-        applications: payload ? { where: { candidate: { userId: payload.id } } } : false
+        company: { select: { id: true, name: true, logoUrl: true, website: true } },
+        category: { select: { id: true, name: true, icon: true } },
+        // Nếu đã login, kiểm tra xem đã nộp đơn cho job này chưa
+        applications: payload ? { 
+          where: { candidate: { userId: payload.id } },
+          select: { status: true, appliedAt: true } 
+        } : false
       }
     });
 
     if (!job) return c.json({ success: false, message: "Không tìm thấy công việc" }, 404);
 
-    const application = job.applications?.[0];
+    // 4. CHUẨN HÓA DỮ LIỆU TRẢ VỀ
+    const userAppStatus = job.applications?.[0];
 
     const result = {
       ...job,
@@ -507,13 +546,22 @@ jobRoute.openapi(getJobByIdDoc, async (c) => {
       updatedAt: job.updatedAt.toISOString(),
       startDate: job.startDate?.toISOString() || null,
       deadline: job.deadline?.toISOString() || null,
+      // Kiểm tra trạng thái "Đã lưu" (Saved Jobs)
       isSaved: payload ? job.savedByUserIds.includes(payload.id) : false,
-      applicationStatus: application ? application.status : null,
+      // Trạng thái ứng tuyển
+      applicationStatus: userAppStatus ? userAppStatus.status : null,
+      appliedAt: userAppStatus ? userAppStatus.appliedAt.toISOString() : null,
     };
 
+    // Loại bỏ mảng applications thô để trả về dữ liệu sạch
+    // @ts-ignore
+    delete result.applications;
+
     return c.json({ success: true, data: result }, 200);
+
   } catch (error: any) {
-    return c.json({ success: false, message: error.message }, 400);
+    console.error("❌ Get Job Error:", error);
+    return c.json({ success: false, message: "Lỗi khi lấy thông tin công việc" }, 400);
   }
 });
 

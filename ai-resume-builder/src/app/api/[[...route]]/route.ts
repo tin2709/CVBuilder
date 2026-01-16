@@ -13,6 +13,7 @@ import reviewRoute from '@/server/routes/review'
 import categoryRoute from '@/server/routes/category'
 import notificationRoute from '@/server/routes/notification'
 import { initRedisIndices } from '@/lib/redis-init'
+export const dynamic = 'force-dynamic';
 
 // Khởi tạo Redis Indices
 initRedisIndices().catch((err) => {
