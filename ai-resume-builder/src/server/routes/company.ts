@@ -9,6 +9,7 @@ type Variables = {
     id: string;
     role: string;
     email: string;
+    companyId?: string; // ID công ty được nhúng trong Token
   }
 }
 
@@ -205,5 +206,39 @@ companyRoute.openapi(doc.adminReviewUpdateDoc, async (c) => {
 
   return c.json({ success: true, message: "Thông tin công ty đã được cập nhật chính thức" });
 });
+companyRoute.use('/stats', verifyRole(["RECRUITER", "ADMIN"]));
+companyRoute.openapi(doc.getCompanyDashboardStatsDoc, async (c) => {
+  const payload = c.get('jwtPayload');
+  const query = c.req.query(); // Lấy query params
+  
+  let targetCompanyId: string | undefined;
 
+  // LOGIC PHÂN QUYỀN THÔNG MINH
+  if (payload.role === 'ADMIN') {
+    // Admin có thể xem bất kỳ công ty nào nếu truyền ?companyId=...
+    // Nếu Admin không truyền, có thể mặc định lấy một ID nào đó hoặc báo lỗi
+    targetCompanyId = query.companyId;
+    if (!targetCompanyId) return c.json({ success: false, message: "Admin cần cung cấp companyId" }, 400);
+  } else {
+    // Recruiter chỉ được xem công ty của chính mình (lấy từ Token)
+    targetCompanyId = payload.companyId;
+  }
+
+  if (!targetCompanyId) {
+    return c.json({ success: false, message: "Không tìm thấy thông tin công ty" }, 403);
+  }
+
+  try {
+    const stats = await prisma.companyStat.findUnique({
+      where: { companyId: targetCompanyId }
+    });
+
+    return c.json({
+      success: true,
+      data: stats || { totalJobs: 0, totalApplications: 0, totalInterviews: 0, avgAiScore: 0 }
+    }, 200);
+  } catch (error: any) {
+    return c.json({ success: false, message: error.message }, 500);
+  }
+});
 export default companyRoute;

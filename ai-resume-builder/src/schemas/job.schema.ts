@@ -165,3 +165,10 @@ export const JobDetailResponseSchema = z.object({
 
 // 6. Schema cho danh sách công việc đã lưu (Tận dụng lại JobListResponse)
 export const GetSavedJobsResponseSchema = JobListResponseSchema.openapi('GetSavedJobsResponse');
+
+export const CompanyStatSchema = z.object({
+  totalJobs: z.number(),
+  totalApplications: z.number(),
+  totalInterviews: z.number(),
+  avgAiScore: z.number(),
+}).openapi('CompanyStat');

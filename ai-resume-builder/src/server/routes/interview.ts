@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { verifyRole } from '@/middlewares/auth.middleware';
 import * as doc from '@/schemas/api-doc';
 import { addInterviewReminder, reminderQueue, addMailJob } from '@/queues/reminder.queue';
+import { triggerStatsUpdate } from '@/queues/stats.queue';
 
 type Variables = { jwtPayload: { id: string; role: string } }
 const interviewRoute = new OpenAPIHono<{ Variables: Variables }>();
@@ -45,7 +46,9 @@ interviewRoute.openapi(doc.createInterviewDoc, async (c) => {
         status: 'PENDING'
       }
     });
-
+if (application.job.companyId) {
+      await triggerStatsUpdate(application.job.companyId);
+    }
     // 3. BULLMQ - Gửi Email mời phỏng vấn NGAY LẬP TỨC
     await addMailJob({
       to: application.candidate.user.email,
@@ -183,7 +186,9 @@ interviewRoute.openapi(doc.deleteInterviewDoc, async (c) => {
   await prisma.interview.delete({ where: { id } });
   const job = await reminderQueue.getJob(`reminder-${id}`);
   if (job) await job.remove();
-
+ if (interview.application.job.companyId) {
+    await triggerStatsUpdate(interview.application.job.companyId);
+  }
   return c.json({ success: true, message: "Đã xóa buổi phỏng vấn và lịch nhắc nhở" });
 
 });

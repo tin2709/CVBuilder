@@ -16,6 +16,7 @@ import axios from 'axios';
 import { verifyRole } from '@/middlewares/auth.middleware';
 import { nanoid } from 'nanoid';
 import { getDailyVisitorHash } from '@/lib/Hash/analystics';
+import { triggerStatsUpdate } from '@/queues/stats.queue';
 
 // 1. Định nghĩa kiểu dữ liệu khớp với những gì Middleware lưu trữ
 type Variables = {
@@ -126,6 +127,7 @@ jobRoute.openapi(createJobDoc, async (c) => {
         status: 'DRAFT',      // Mặc định là nháp
         isLive: false,        // Chưa công khai
         recruiterId: payload.id,
+        companyId: (payload as any).companyId || null, 
         startDate: new Date(body.startDate),
         deadline: new Date(body.deadline),
       },
@@ -147,6 +149,9 @@ Hạn nộp hồ sơ: ${new Date(body.deadline).toLocaleDateString('vi-VN')}.
 Link đăng ký: ${body.applyLink}
 Hotline: ${body.hotline}
     `.trim();
+if (job.companyId) {
+      await triggerStatsUpdate(job.companyId);
+    }
     return c.json({ 
       success: true, 
       data: job as any, 
@@ -185,7 +190,9 @@ jobRoute.openapi(approveJobDoc, async (c) => {
       data: { status: 'PUBLISHED', isLive: true }
     })
   ]);
-
+if (newLive.companyId) {
+    await triggerStatsUpdate(newLive.companyId);
+  }
   return c.json({ success: true, data: newLive as any }, 200);
 });
 // 3. Tạo Version mới để edit
@@ -220,7 +227,9 @@ jobRoute.openapi(createNewJobVersionDoc, async (c) => {
         deadline: body.deadline ? new Date(body.deadline) : latestJob.deadline,
       }
     });
-
+if (newDraft.companyId) {
+    await triggerStatsUpdate(newDraft.companyId);
+  }
     return c.json({ 
       success: true, 
       data: newDraft as any, 

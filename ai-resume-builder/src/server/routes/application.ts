@@ -2,6 +2,7 @@ import { OpenAPIHono } from '@hono/zod-openapi';
 import { prisma } from '@/lib/db';
 import { verifyRole } from '@/middlewares/auth.middleware';
 import * as doc from '@/schemas/api-doc';
+import { triggerStatsUpdate } from '@/queues/stats.queue';
 
 type Variables = {
   jwtPayload: {
@@ -30,7 +31,7 @@ applicationRoute.openapi(doc.applyJobDoc, async (c) => {
     // 1. Lấy thông tin Công việc (Để lấy documentId)
     const job = await prisma.job.findUnique({
       where: { id: jobId },
-      select: { documentId: true, title: true, recruiterId: true, status: true }
+      select: { documentId: true, title: true, recruiterId: true, status: true, companyId: true }
     });
 
     if (!job || job.status !== 'PUBLISHED') {
@@ -90,7 +91,9 @@ applicationRoute.openapi(doc.applyJobDoc, async (c) => {
         aiStatus: 'PENDING'
       }
     });
-
+if (job?.companyId) {
+  await triggerStatsUpdate(job.companyId);
+}
     // 7. SOCKET.IO: Thông báo cho Nhà tuyển dụng có ứng viên mới (Real-time)
     const io = getGlobalIo();
     if (io) {

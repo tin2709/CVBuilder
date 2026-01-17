@@ -844,7 +844,30 @@ export const createInterviewDoc = createRoute({
     },
   },
 });
+// src/schemas/api-doc.ts
 
+export const getCompanyDashboardStatsDoc = createRoute({
+  method: 'get',
+  path: '/stats',
+  tags: ['Companies'],
+  summary: 'Lấy số liệu thống kê tổng quát của công ty (Dành cho Recruiter)',
+  responses: {
+    200: { 
+      content: { 
+        'application/json': { 
+          schema: z.object({ 
+            success: z.boolean(), 
+            data: job.CompanyStatSchema 
+          }) 
+        } 
+      }, 
+      description: 'Thành công' 
+    },
+    401: { description: 'Chưa đăng nhập' },
+    403: { description: 'Không có quyền' },
+    404: { description: 'Không tìm thấy dữ liệu thống kê' }
+  },
+});
 // 2. Lấy danh sách phỏng vấn của Nhà tuyển dụng
 export const getInterviewsDoc = createRoute({
   method: 'get',
@@ -1268,3 +1291,4 @@ export const markAsReadDoc = createRoute({
     404: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Không thấy' },
   },
 });
+

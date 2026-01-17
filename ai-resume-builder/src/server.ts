@@ -6,7 +6,8 @@ import { Server } from "socket.io";
 import "./queues/reminder.queue"
 import "./queues/reminder.worker"
 import "./queues/mail.worker"
-
+import "./queues/stats.queue"
+import "./queues/stats.worker"
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
 const port = 3000;

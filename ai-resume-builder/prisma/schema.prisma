@@ -280,6 +280,7 @@ model Company {
   recruiters      User[]   
   jobs            Job[]    
   reviews         Review[]
+  companyStats    CompanyStat[]
 }
 
 // Model Đánh giá công ty
@@ -328,6 +329,18 @@ model Notification {
   idempotencyKey String?  @unique 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt // Cần thiết để tính cửa sổ 10 phút
+}
+model CompanyStat {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  companyId         String   @unique @db.ObjectId
+  company           Company  @relation(fields: [companyId], references: [id])
+
+  totalJobs         Int      @default(0)
+  totalApplications Int      @default(0)
+  totalInterviews   Int      @default(0)
+  avgAiScore        Float    @default(0.0) // Điểm AI trung bình của các ứng viên
+  
+  updatedAt         DateTime @updatedAt
 }
 enum SharingMode {
   PRIVATE      // Chỉ chủ sở hữu
