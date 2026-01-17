@@ -1060,6 +1060,38 @@ export const getApplicationCVSnapshotDoc = createRoute({
     404: { description: 'Không tìm thấy đơn hoặc snapshot' }
   },
 });
+export const getApplicationHistoryDoc = createRoute({
+  method: 'get',
+  path: '/{id}/history',
+  tags: [TAG_APP],
+  summary: 'Xem lịch sử thay đổi của đơn ứng tuyển (Audit Log)',
+  request: { 
+    params: z.object({ id: z.string().openapi({ example: '674d35629...' }) }) 
+  },
+  responses: {
+    200: { 
+      content: { 
+        'application/json': { 
+          schema: z.object({
+            success: z.boolean(),
+            data: z.array(z.object({
+              actor: z.string(),
+              action: z.string(),
+              from: z.any(),
+              to: z.any(),
+              at: z.string(),
+              ip: z.string().nullable(),
+              userAgent: z.string().nullable()
+            }))
+          }) 
+        } 
+      }, 
+      description: 'Lịch sử thay đổi' 
+    },
+    403: { description: 'Không có quyền xem lịch sử đơn này' },
+    404: { description: 'Không tìm thấy' }
+  },
+});
 const TAG_REVIEWS = 'Company Reviews';
 
 // 1. Lấy danh sách review

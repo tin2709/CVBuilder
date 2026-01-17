@@ -29,7 +29,7 @@ model User {
   receivedQuestions Question[] @relation("ReceivedQuestions")
   savedJobIds       String[]          @db.ObjectId
   savedJobs         Job[]             @relation("UserSavedJobs", fields: [savedJobIds], references: [id])
-
+  auditLogs AuditLog[] // Quan hệ ngược
   notifications     Notification[]
 }
 
@@ -199,6 +199,7 @@ model Application {
   // Snapshot: Lưu lại link CV tại thời điểm ứng tuyển.
   // Lý do: Nếu sau này ứng viên sửa CV chính, nhà tuyển dụng vẫn thấy bản CV cũ họ đã nộp.
   appliedCvUrl String?
+  cvContentHash String?  
 
   // --- AI SCREENING DATA ---
   aiStatus     AiStatus  @default(PENDING) // Trạng thái xử lý của BullMQ
@@ -341,6 +342,33 @@ model CompanyStat {
   avgAiScore        Float    @default(0.0) // Điểm AI trung bình của các ứng viên
   
   updatedAt         DateTime @updatedAt
+}
+model AuditLog {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Ai thực hiện hành động
+  userId      String   @db.ObjectId
+  user        User     @relation(fields: [userId], references: [id])
+  
+  // Hành động gì (VD: CHANGE_STATUS, DELETE_JOB, UPDATE_PROFILE)
+  action      String   
+  
+  // Tác động lên đối tượng nào
+  entityId    String   // ID của Application, Job hoặc Company
+  entityType  String   // "APPLICATION", "JOB", "COMPANY", "USER"
+  
+  // Chi tiết thay đổi (Dùng Json để lưu snapshot)
+  oldValue    Json?    
+  newValue    Json?    
+  
+  // Thông tin thêm (IP, Trình duyệt)
+  ip          String?
+  userAgent   String?
+  
+  createdAt   DateTime @default(now())
+
+  @@index([entityId])
+  @@index([userId])
 }
 enum SharingMode {
   PRIVATE      // Chỉ chủ sở hữu

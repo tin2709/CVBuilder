@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db';
 import { verifyRole } from '@/middlewares/auth.middleware';
 import * as doc from '@/schemas/api-doc';
 import { triggerStatsUpdate } from '@/queues/stats.queue';
+import { generateCVHash } from '@/lib/Hash/hash';
+import { recordAuditLog } from '@/lib/audit'; 
 
 type Variables = {
   jwtPayload: {
@@ -52,7 +54,6 @@ applicationRoute.openapi(doc.applyJobDoc, async (c) => {
     if (!profile) {
       return c.json({ success: false, message: "Vui lòng tạo hồ sơ chính thức (Master) trước khi ứng tuyển" }, 400);
     }
-
     // 3. Kiểm tra xem đã nộp cho chuỗi bài đăng (documentId) này chưa 
     // Tránh việc nộp lại khi nhà tuyển dụng ra Version mới cho cùng 1 Job
     const existingApp = await prisma.application.findFirst({
@@ -79,6 +80,7 @@ applicationRoute.openapi(doc.applyJobDoc, async (c) => {
       educations: profile.educations,
       appliedAt: new Date().toISOString()
     };
+  const currentHash = generateCVHash(cvSnapshot);
 
     // 5. Tạo đơn ứng tuyển trong Database
     const newApp = await prisma.application.create({
@@ -87,6 +89,7 @@ applicationRoute.openapi(doc.applyJobDoc, async (c) => {
         jobDocumentId: job.documentId,
         candidateId: profile.id,
         cvSnapshot: cvSnapshot as any, // Lưu cục JSON
+        cvContentHash: currentHash, // Lưu mã hash để đối chiếu sau này
         status: 'PENDING',
         aiStatus: 'PENDING'
       }
@@ -204,24 +207,75 @@ applicationRoute.openapi(doc.updateAppStatusDoc, async (c) => {
   const { id } = c.req.valid('param');
   const { status } = c.req.valid('json');
 
+  const oldApp = await prisma.application.findUnique({
+    where: { id },
+    include: { job: true }
+  });
+
+  if (!oldApp) return c.json({ success: false, message: "Không tìm thấy đơn" }, 404);
+  if (oldApp.job.recruiterId !== payload.id) {
+    return c.json({ success: false, message: "Không có quyền" }, 403);
+  }
+
+  const updatedApp = await prisma.application.update({
+    where: { id },
+    data: { status }
+  });
+
+  // GHI NHẬT KÝ THAY ĐỔI
+  await recordAuditLog(c, {
+    action: 'CHANGE_APP_STATUS',
+    entityId: id,
+    entityType: 'APPLICATION',
+    oldValue: { status: oldApp.status },
+    newValue: { status: updatedApp.status }
+  });
+
+  // Gửi Socket.io cho ứng viên biết trạng thái đã đổi
+  const io = getGlobalIo();
+  if (io) {
+    io.to(oldApp.candidateId).emit('notification_updated', {
+      content: `Đơn ứng tuyển của bạn đã chuyển sang trạng thái: ${status}`,
+      type: 'APPLICATION_STATUS'
+    });
+  }
+
+  return c.json({ success: true, message: `Đã chuyển sang ${status}` }, 200);
+});
+applicationRoute.use('/:id/history', verifyRole(['RECRUITER', 'ADMIN']));
+applicationRoute.openapi(doc.getApplicationHistoryDoc, async (c) => {
+  const { id } = c.req.valid('param');
+  const payload = c.get('jwtPayload');
+
+  // Kiểm tra xem Recruiter có quyền sở hữu Job của đơn này không
   const app = await prisma.application.findUnique({
     where: { id },
     include: { job: true }
   });
 
-  if (!app) return c.json({ success: false, message: "Không tìm thấy đơn" }, 404);
-  
-  // Kiểm tra đơn này có thuộc bài đăng của Recruiter này không
-  if (app.job.recruiterId !== payload.id) {
-    return c.json({ success: false, message: "Bạn không có quyền cập nhật đơn này" }, 403);
+  if (!app) return c.json({ success: false, message: "Không tìm thấy" }, 404);
+  if (payload.role !== 'ADMIN' && app.job.recruiterId !== payload.id) {
+    return c.json({ success: false, message: "Không có quyền" }, 403);
   }
 
-  await prisma.application.update({
-    where: { id },
-    data: { status }
+  const logs = await prisma.auditLog.findMany({
+    where: { entityId: id, entityType: 'APPLICATION' },
+    include: { user: { select: { name: true } } },
+    orderBy: { createdAt: 'desc' }
   });
 
-  return c.json({ success: true, message: `Đã chuyển sang ${status}` });
+  return c.json({
+    success: true,
+    data: logs.map(log => ({
+      actor: log.user.name || "Hệ thống",
+      action: log.action,
+      from: (log.oldValue as any)?.status || "N/A",
+      to: (log.newValue as any)?.status || "N/A",
+      at: log.createdAt.toISOString(),
+      ip: log.ip,
+      userAgent: log.userAgent
+    }))
+  }, 200);
 });
 applicationRoute.use('/:id', verifyRole('RECRUITER'));
 applicationRoute.openapi(doc.getApplicationDetailDoc, async (c) => {
