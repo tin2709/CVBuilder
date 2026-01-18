@@ -12,6 +12,7 @@ import applicationRoute from '@/server/routes/application'
 import reviewRoute from '@/server/routes/review'
 import categoryRoute from '@/server/routes/category'
 import notificationRoute from '@/server/routes/notification'
+import shareRoute from '@/server/routes/share'
 import { initRedisIndices } from '@/lib/redis-init'
 export const dynamic = 'force-dynamic';
 
@@ -64,6 +65,7 @@ const routes = app
   .route('/reviews', reviewRoute) // THÊM DÒNG NÀY
   .route('/categories', categoryRoute) // THÊM DÒNG NÀY
   .route('/notifications', notificationRoute) // THÊM DÒNG NÀY
+  .route('/shares', shareRoute) // THÊM DÒNG NÀY
 
 
 

@@ -1354,4 +1354,92 @@ export const markAsReadDoc = createRoute({
     404: { content: { 'application/json': { schema: job.ErrorResponseSchema } }, description: 'Không thấy' },
   },
 });
+const TAG_SHARE = 'Secure Sharing';
 
+// 1. Tạo Link chia sẻ
+export const createShareLinkDoc = createRoute({
+  method: 'post',
+  path: '/me/profile',
+  tags: [TAG_SHARE],
+  summary: 'Tạo link chia sẻ hồ sơ bảo mật (CANDIDATE)',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            password: z.string().optional().openapi({ example: '123456' }),
+            expiresAt: z.string().optional().openapi({ example: '2025-12-31T23:59:59Z' }),
+            maxViews: z.number().optional().openapi({ example: 10 }),
+            allowedEmails: z.array(z.string().email()).optional().openapi({ example: ['mentor@gmail.com'] })
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    201: { 
+      content: { 'application/json': { schema: z.object({ success: z.boolean(), shareUrl: z.string(), token: z.string() }) } }, 
+      description: 'Tạo thành công' 
+    },
+    400: { content: { 'application/json': { schema: auth.ErrorResponseSchema } }, description: 'Lỗi dữ liệu' },
+    404: { content: { 'application/json': { schema: auth.ErrorResponseSchema } }, description: 'Không thấy hồ sơ' }
+  }
+  
+});
+
+// 2. Xác thực Link (Nhập mật khẩu/OTP)
+export const verifyShareLinkDoc = createRoute({
+  method: 'post',
+  path: '/{token}/verify',
+  tags: [TAG_SHARE],
+  summary: 'Xác thực quyền truy cập vào link chia sẻ',
+  request: {
+    params: z.object({ token: z.string() }),
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            password: z.string().optional(),
+            email: z.string().email().optional(),
+            otp: z.string().optional()
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: { 
+      content: { 'application/json': { schema: z.object({ success: z.boolean(), viewToken: z.string() }) } }, 
+      description: 'Xác thực thành công' 
+    },
+    403: { description: 'Sai mật khẩu hoặc OTP' }
+  }
+});
+
+// 3. Xem CV từ Link
+export const getSharedCVDoc = createRoute({
+  method: 'get',
+  path: '/{viewToken}/view', // Sửa path: viewToken nằm trực tiếp trên URL
+  tags: [TAG_SHARE],
+  summary: 'Lấy dữ liệu CV từ link bảo mật bằng viewToken trên URL',
+  request: {
+      params: z.object({
+      viewToken: z.string().openapi({
+        param: {
+          name: 'viewToken',
+          in: 'path',
+        },
+        description: 'JWT Token nhận được từ bước verify',
+        example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+      }),
+    }),
+  },
+  responses: {
+    200: { 
+        content: { 'application/json': { schema: z.object({ success: z.boolean(), data: z.any() }) } }, 
+        description: 'Thành công' 
+    },
+    401: { description: 'viewToken không hợp lệ hoặc hết hạn' },
+    410: { description: 'Link gốc đã bị xóa hoặc hết lượt xem' }
+  }
+});

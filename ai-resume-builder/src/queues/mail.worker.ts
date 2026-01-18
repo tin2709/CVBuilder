@@ -26,6 +26,16 @@ const MAIL_TEMPLATES: Record<string, { subject: string; body: string }> = {
       <p>Trân trọng,<br/>Đội ngũ Tuyển dụng</p>
     `,
   },
+   SHARE_CV_OTP: {
+    subject: "Mã xác thực truy cập hồ sơ của {{ candidateName }}",
+    body: `
+      <h2>Xác thực truy cập</h2>
+      <p>Chào bạn,</p>
+      <p>Bạn đang yêu cầu truy cập vào hồ sơ bảo mật của <b>{{ candidateName }}</b>.</p>
+      <p>Mã OTP của bạn là: <b style="font-size: 24px; color: #136dec;">{{ otp }}</b></p>
+      <p>Mã này có hiệu lực trong 10 phút. Vui lòng không chia sẻ mã này.</p>
+    `,
+  },
   // Bạn có thể thêm các template khác như OTP_EMAIL ở đây
 };
 

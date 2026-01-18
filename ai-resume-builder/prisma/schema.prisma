@@ -69,6 +69,25 @@ model CandidateProfile {
   layout          CVBlock[]
   cvUrl       String?  
   applications Application[]
+  shareLinks         ShareLink[]
+}
+model ShareLink {
+  id                 String           @id @default(auto()) @map("_id") @db.ObjectId
+  token              String           @unique // Mã ngẫu nhiên trên URL
+  
+  candidateProfileId String           @db.ObjectId
+  candidateProfile   CandidateProfile @relation(fields: [candidateProfileId], references: [id], onDelete: Cascade)
+
+  // --- CẤU HÌNH BẢO MẬT ---
+  password           String?          // Hash mật khẩu (nếu có)
+  expiresAt          DateTime?        // Ngày hết hạn link
+  allowedEmails      String[]         // Chỉ những email này mới được xem (nếu cần OTP)
+  
+  // --- TRACKING ---
+  viewCount          Int              @default(0)
+  maxViews           Int?             // Giới hạn số lần xem (ví dụ: chỉ cho xem 5 lần)
+  
+  createdAt          DateTime         @default(now())
 }
 model CVBlock {
   id               String           @id @default(auto()) @map("_id") @db.ObjectId

@@ -362,6 +362,7 @@ candidateRoute.openapi(doc.reorderLayoutDoc, async (c) => {
 
   return c.json({ success: true, message: "Layout updated" }, 200);
 });
+
 // --- CẬP NHẬT HỒ SƠ ---
 candidateRoute.use('/me/update', verifyRole("CANDIDATE"));
 
