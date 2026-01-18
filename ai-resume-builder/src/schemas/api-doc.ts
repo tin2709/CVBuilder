@@ -842,6 +842,10 @@ export const createInterviewDoc = createRoute({
       content: { 'application/json': { schema: interview.ErrorResponseSchema } }, 
       description: 'Không tìm thấy đơn ứng tuyển' 
     },
+     500: { 
+      content: { 'application/json': { schema: interview.ErrorResponseSchema } }, 
+      description: 'Lỗi hệ thống' 
+    },
   },
 });
 // src/schemas/api-doc.ts
@@ -880,7 +884,34 @@ export const getInterviewsDoc = createRoute({
     401: { description: 'Chưa đăng nhập' }
   },
 });
-
+export const getAvailableSlotsDoc = createRoute({
+  method: 'get',
+  path: '/available-slots',
+  tags: [TAG_INTERVIEW],
+  summary: 'Lấy danh sách khung giờ phỏng vấn (Dynamic Properties nội bộ)',
+  request: {
+    query: z.object({
+      date: z.string().openapi({ example: '2025-01-20', description: 'Ngày muốn kiểm tra lịch' })
+    })
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            success: z.boolean(),
+            data: z.array(z.object({
+              time: z.string(),       // "09:00"
+              isoString: z.string(),  // "2025-01-20T09:00:00.000Z"
+              isAvailable: z.boolean()
+            }))
+          })
+        }
+      },
+      description: 'Danh sách khung giờ'
+    }
+  },
+});
 // 3. Cập nhật kết quả/ghi chú phỏng vấn
 export const updateInterviewDoc = createRoute({
   method: 'patch',

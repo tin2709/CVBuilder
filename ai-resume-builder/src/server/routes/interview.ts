@@ -16,13 +16,20 @@ interviewRoute.use('/create', verifyRole('RECRUITER')); // Chỉ áp dụng cho 
 interviewRoute.openapi(doc.createInterviewDoc, async (c) => {
   const payload = c.get('jwtPayload');
   const { applicationId, date, notes } = c.req.valid('json');
+  const recruiterId = payload.id;
+  const interviewDate = new Date(date);
 
   try {
-    // 1. Kiểm tra quyền và lấy thông tin chi tiết (Email, Tên ứng viên, Tên job)
+    // 1. Kiểm tra thời gian hợp lệ (Không được đặt lịch trong quá khứ)
+    if (interviewDate.getTime() < Date.now()) {
+      return c.json({ success: false, message: "Không thể đặt lịch phỏng vấn trong quá khứ." }, 400);
+    }
+
+    // 2. Lấy thông tin chi tiết đơn ứng tuyển và Job
     const application = await prisma.application.findUnique({
       where: { id: applicationId },
       include: { 
-        job: true,
+        job: { select: { id: true, recruiterId: true, companyId: true, title: true } },
         candidate: {
           include: { user: { select: { email: true, name: true } } }
         }
@@ -30,26 +37,48 @@ interviewRoute.openapi(doc.createInterviewDoc, async (c) => {
     });
 
     if (!application) {
-      return c.json({ success: false, message: "Không tìm thấy đơn ứng tuyển" }, 404);
+      return c.json({ success: false, message: "Không tìm thấy đơn ứng tuyển." }, 404);
     }
 
-    if (application.job.recruiterId !== payload.id) {
-      return c.json({ success: false, message: "Không có quyền tạo lịch cho đơn này" }, 403);
+    // 3. Kiểm tra quyền sở hữu
+    if (application.job.recruiterId !== recruiterId) {
+      return c.json({ success: false, message: "Bạn không có quyền tạo lịch cho đơn ứng tuyển này." }, 403);
     }
 
-    // 2. Tạo bản ghi phỏng vấn trong Database
+    // 4. LOGIC DYNAMIC PROPERTIES: Kiểm tra trùng lịch nội bộ (Chống Overbooking)
+    const duplicateSchedule = await prisma.interview.findFirst({
+      where: {
+        application: {
+          job: { recruiterId: recruiterId } // Chỉ kiểm tra lịch của chính Nhà tuyển dụng này
+        },
+        date: interviewDate,
+        status: { not: 'CANCELLED' } // Bỏ qua những lịch đã hủy
+      }
+    });
+
+    if (duplicateSchedule) {
+      return c.json({ 
+        success: false, 
+        message: `Bạn đã có một buổi phỏng vấn khác vào lúc ${interviewDate.toLocaleString('vi-VN')}. Vui lòng chọn khung giờ khác.` 
+      }, 400);
+    }
+
+    // 5. Thực hiện tạo bản ghi phỏng vấn
     const newInterview = await prisma.interview.create({
       data: {
         applicationId,
-        date: new Date(date),
+        date: interviewDate,
         notes,
         status: 'PENDING'
       }
     });
-if (application.job.companyId) {
+
+    // 6. Cập nhật thống kê Dashboard (BullMQ)
+    if (application.job.companyId) {
       await triggerStatsUpdate(application.job.companyId);
     }
-    // 3. BULLMQ - Gửi Email mời phỏng vấn NGAY LẬP TỨC
+
+    // 7. BULLMQ: Gửi Email mời phỏng vấn NGAY LẬP TỨC
     await addMailJob({
       to: application.candidate.user.email,
       subject: `[Mời phỏng vấn] Vị trí ${application.job.title}`,
@@ -57,15 +86,15 @@ if (application.job.companyId) {
       payload: {
         candidateName: application.candidate.user.name || "Ứng viên",
         jobTitle: application.job.title,
-        interviewTime: new Date(date).toLocaleString('vi-VN'),
+        interviewTime: interviewDate.toLocaleString('vi-VN'),
         notes: notes || "Không có ghi chú thêm"
       }
     });
 
-    // 4. BULLMQ - Lên lịch nhắc nhở TRƯỚC 1 TIẾNG (Chạy ngầm với delay)
-    await addInterviewReminder(newInterview.id, new Date(date));
+    // 8. BULLMQ: Lên lịch nhắc nhở TRƯỚC 1 TIẾNG (Delayed Job)
+    await addInterviewReminder(newInterview.id, interviewDate);
 
-    // 5. Cập nhật trạng thái đơn ứng tuyển sang 'INTERVIEW'
+    // 9. Cập nhật trạng thái đơn ứng tuyển sang 'INTERVIEW'
     await prisma.application.update({
       where: { id: applicationId },
       data: { status: 'INTERVIEW' }
@@ -77,8 +106,8 @@ if (application.job.companyId) {
     }, 201);
 
   } catch (error: any) {
-    console.error("Lỗi tạo phỏng vấn:", error);
-    return c.json({ success: false, message: error.message }, 400);
+    console.error("❌ Lỗi tạo phỏng vấn:", error);
+    return c.json({ success: false, message: "Lỗi hệ thống: " + error.message }, 500);
   }
 });
 
@@ -166,7 +195,48 @@ interviewRoute.openapi(doc.getInterviewsDoc, async (c) => {
     }
   });
 });
+interviewRoute.use('/available-slots', verifyRole('RECRUITER')); // Chỉ áp dụng cho POST nộp đơn
+interviewRoute.openapi(doc.getAvailableSlotsDoc, async (c) => {
+  const payload = c.get('jwtPayload');
+  const { date } = c.req.valid('query'); // Giả sử bạn gửi "2025-01-13"
 
+  // 1. Tạo khoảng thời gian bắt đầu và kết thúc ngày theo UTC
+  const startOfDay = new Date(`${date}T00:00:00.000Z`);
+  const endOfDay = new Date(`${date}T23:59:59.999Z`);
+
+  // 2. Lấy các lịch đã đặt của Recruiter này trong ngày đó
+  const existingInterviews = await prisma.interview.findMany({
+    where: {
+      application: { job: { recruiterId: payload.id } },
+      date: { gte: startOfDay, lte: endOfDay },
+      status: { not: 'CANCELLED' }
+    },
+    select: { date: true }
+  });
+
+  // 3. Danh sách các khung giờ bạn muốn hiển thị trên giao diện (theo UTC)
+  // Hãy đảm bảo có số 7 (vì dữ liệu bạn là 7:00)
+  const workHours = [7, 8, 9, 10, 11, 13, 14, 15, 16]; 
+  
+  const slots = workHours.map(hour => {
+    // Logic: Nếu có bất kỳ lịch nào trong DB có giờ UTC khớp với 'hour' này
+    const isTaken = existingInterviews.some(interview => {
+      const dbHour = interview.date.getUTCHours();
+      return dbHour === hour;
+    });
+
+    // Tạo chuỗi ISO chuẩn cho slot này
+    const slotDate = new Date(`${date}T${hour.toString().padStart(2, '0')}:00:00.000Z`);
+
+    return {
+      time: `${hour.toString().padStart(2, '0')}:00 (UTC)`,
+      isoString: slotDate.toISOString(),
+      isAvailable: !isTaken // Trả về false nếu đã có lịch (isTaken = true)
+    };
+  });
+
+  return c.json({ success: true, data: slots }, 200);
+});
 // [API: XÓA 1 BẢN GHI]
 interviewRoute.use('/delete/:id', verifyRole('RECRUITER')); // Chỉ áp dụng cho POST nộp đơn
 interviewRoute.openapi(doc.deleteInterviewDoc, async (c) => {

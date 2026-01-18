@@ -277,13 +277,28 @@ model Company {
   createdBy       String   @db.ObjectId
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-
+// --- WEBHOOK CONFIG ---
+  webhookUrl   String?  // URL mà công ty cung cấp (e.g., https://hooks.slack.com/...)
+  webhookSecret String? // Mã bí mật để công ty xác thực tin nhắn đến từ hệ thống của bạn
+  webhookEnabled Boolean @default(false)
+  
+  webhookLogs  WebhookLog[]
   recruiters      User[]   
   jobs            Job[]    
   reviews         Review[]
   companyStats    CompanyStat[]
 }
-
+model WebhookLog {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  companyId  String   @db.ObjectId
+  company    Company  @relation(fields: [companyId], references: [id])
+  
+  url        String
+  payload    Json
+  statusCode Int?     // 200, 404, 500...
+  error      String?
+  createdAt  DateTime @default(now())
+}
 // Model Đánh giá công ty
 model Review {
   id              String   @id @default(auto()) @map("_id") @db.ObjectId

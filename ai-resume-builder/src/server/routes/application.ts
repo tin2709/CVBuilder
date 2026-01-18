@@ -5,6 +5,7 @@ import * as doc from '@/schemas/api-doc';
 import { triggerStatsUpdate } from '@/queues/stats.queue';
 import { generateCVHash } from '@/lib/Hash/hash';
 import { recordAuditLog } from '@/lib/audit'; 
+import { addWebhookJob } from '@/queues/webhook.queue';
 
 type Variables = {
   jwtPayload: {
@@ -94,8 +95,16 @@ applicationRoute.openapi(doc.applyJobDoc, async (c) => {
         aiStatus: 'PENDING'
       }
     });
-if (job?.companyId) {
+if (job.companyId) {
   await triggerStatsUpdate(job.companyId);
+   addWebhookJob(job.companyId, 'candidate.applied', {
+      applicationId: newApp.id,
+      jobTitle: job.title,
+      candidateName: profile.user.name,
+      matchScore: newApp.aiMatchScore, // Nếu đã có điểm AI
+      viewLink: `https://your-app.com/recruiter/applications/${newApp.id}`
+    });
+  
 }
     // 7. SOCKET.IO: Thông báo cho Nhà tuyển dụng có ứng viên mới (Real-time)
     const io = getGlobalIo();
